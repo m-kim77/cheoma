@@ -20,12 +20,16 @@ final class StatusBarController: NSObject {
     private var hideMenuItem: NSMenuItem?
     private var warningsMenuItem: NSMenuItem?
     private var loginMenuItem: NSMenuItem?
+    private var themeMenuItems: [NotchTheme: NSMenuItem] = [:]
     private let hiddenPanel = HiddenItemsPanelController()
     private var restoreTimer: Timer?
     private var restoreStarted = Date()
     private var restorePID: pid_t = 0
     private var popupAppeared = false
     var onTestAlert: (() -> Void)?
+    /// 노치를 펼쳤을 때 모양 (메뉴의 체크 표시와 선택)
+    var currentTheme: (() -> NotchTheme)?
+    var onSelectTheme: ((NotchTheme) -> Void)?
 
     override init() {
         super.init()
@@ -63,10 +67,20 @@ final class StatusBarController: NSObject {
         // 로그인 항목은 .app 번들로 실행할 때만 등록할 수 있다
         login.isHidden = Bundle.main.bundleIdentifier == nil
         loginMenuItem = login
+        let themes = NSMenu()
+        for theme in NotchTheme.allCases {
+            let item = NSMenuItem(title: theme.title, action: #selector(selectTheme(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = theme.rawValue
+            themes.addItem(item)
+            themeMenuItems[theme] = item
+        }
+        let themeItem = NSMenuItem(title: "노치 모양", action: nil, keyEquivalent: "")
+        themeItem.submenu = themes
         let help = NSMenuItem(title: "⌘ 누른 채 아이콘을 | 왼쪽으로 끌면 숨겨져요", action: nil, keyEquivalent: "")
         help.isEnabled = false
         let quit = NSMenuItem(title: "종료", action: #selector(quit), keyEquivalent: "q")
-        for item in [showHidden, hide, test, warnings, login, .separator(), help, .separator(), quit] {
+        for item in [showHidden, hide, test, warnings, login, themeItem, .separator(), help, .separator(), quit] {
             item.target = self
             menu.addItem(item)
         }
@@ -79,6 +93,8 @@ final class StatusBarController: NSObject {
             hiddenPanel.hide()
             updateLoginItemState()
             warningsMenuItem?.state = WarningAlerts.isEnabled ? .on : .off
+            let theme = currentTheme?() ?? .basic
+            for (key, item) in themeMenuItems { item.state = key == theme ? .on : .off }
             toggleItem.menu = menu
             toggleItem.button?.performClick(nil)
             toggleItem.menu = nil
@@ -205,6 +221,10 @@ final class StatusBarController: NSObject {
 
     @objc private func testAlert() { onTestAlert?() }
     @objc private func toggleWarnings() { WarningAlerts.isEnabled.toggle() }
+    @objc private func selectTheme(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let theme = NotchTheme(rawValue: raw) else { return }
+        onSelectTheme?(theme)
+    }
     @objc private func quit() { NSApp.terminate(nil) }
 
     private static func symbol(_ name: String) -> NSImage? {

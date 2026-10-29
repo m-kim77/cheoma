@@ -36,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusBar.onTestAlert = { [weak self] in
             self?.notchModel.show(NotchAlert(symbol: "bell.fill", tint: .orange, text: "테스트 알림"))
         }
+        statusBar.currentTheme = { [weak self] in self?.notchModel.theme ?? .basic }
+        statusBar.onSelectTheme = { [weak self] theme in self?.notchModel.theme = theme }
         self.statusBar = statusBar
 
         warnings.onAlert = { [weak self] alert in self?.notchModel.show(alert) }

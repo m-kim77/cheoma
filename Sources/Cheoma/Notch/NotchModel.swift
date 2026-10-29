@@ -17,9 +17,12 @@ final class NotchModel: ObservableObject {
     }
 
     static let earWidth: CGFloat = 100
-    /// 창은 가장 큰 탭에 맞춰 한 번만 만들어 두고, 모양만 탭 크기로 바뀐다
-    static let maxOpenSize = CGSize(width: DashboardTab.allCases.map(\.openSize.width).max() ?? 0,
-                                    height: DashboardTab.allCases.map(\.openSize.height).max() ?? 0)
+    /// 창은 가장 큰 탭·테마에 맞춰 한 번만 만들어 두고, 모양만 탭 크기로 바뀐다
+    static let maxOpenSize: CGSize = {
+        let basic = DashboardTab.allCases.map(\.openSize)
+        let sizes = basic + basic.map { Gwanghwamun.frameSize(content: $0) }
+        return CGSize(width: sizes.map(\.width).max() ?? 0, height: sizes.map(\.height).max() ?? 0)
+    }()
     private static let tabDefaultsKey = "dashboardTab"
     private static let openDelay: TimeInterval = 0.18
     private static let alertDuration: TimeInterval = 2.8
@@ -32,7 +35,26 @@ final class NotchModel: ObservableObject {
         didSet { UserDefaults.standard.set(tab.rawValue, forKey: Self.tabDefaultsKey) }
     }
 
-    var openSize: CGSize { tab.openSize }
+    @Published var theme = NotchTheme.saved {
+        didSet { NotchTheme.saved = theme }
+    }
+
+    /// 펼쳤을 때 모양 전체의 크기
+    var openSize: CGSize {
+        switch theme {
+        case .basic: tab.openSize
+        case .gwanghwamun: Gwanghwamun.frameSize(content: dashboardSize)
+        }
+    }
+
+    /// 펼쳤을 때 대시보드 내용의 크기. 광화문은 지붕이 노치를 덮으니 노치 높이만큼 비울 필요가 없다
+    var dashboardSize: CGSize {
+        switch theme {
+        case .basic: tab.openSize
+        case .gwanghwamun: CGSize(width: tab.openSize.width,
+                                  height: tab.openSize.height - notchSize.height + Gwanghwamun.dashboardTopInset)
+        }
+    }
 
     private var openWork: DispatchWorkItem?
     private var alertWork: DispatchWorkItem?

@@ -8,6 +8,37 @@ struct NotchView: View {
     private static let spring = Animation.spring(response: 0.42, dampingFraction: 0.78)
 
     var body: some View {
+        ZStack(alignment: .top) {
+            if model.theme == .gwanghwamun && model.phase == .open {
+                gwanghwamun
+            } else {
+                basic
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(Self.spring, value: model.phase)
+        .animation(Self.spring, value: model.alert)
+        .animation(Self.spring, value: model.tab)
+    }
+
+    /// 광화문 테마로 펼친 모양: 노치에서 지붕이 내려오며 커지고, 석축 안에 대시보드가 나타난다
+    @ViewBuilder
+    private var gwanghwamun: some View {
+        let content = model.dashboardSize
+        let size = Gwanghwamun.frameSize(content: content)
+        GwanghwamunBackground()
+            .frame(width: size.width, height: size.height)
+            .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
+            .transition(.scale(scale: 0.3, anchor: .top).combined(with: .opacity))
+        DashboardView(topInset: Gwanghwamun.dashboardTopInset, stats: stats, fans: fans, tab: $model.tab, theme: $model.theme)
+            .frame(width: content.width, height: content.height, alignment: .top)
+            .padding(.top, Gwanghwamun.contentTop(content: content))
+            .transition(Self.dashboardTransition)
+    }
+
+    /// 기본 테마, 그리고 모든 테마의 닫힘·마우스 가까이·알림
+    @ViewBuilder
+    private var basic: some View {
         let size = model.shapeSize
         let shape: NotchShape = switch model.phase {
         case .open: .open
@@ -29,10 +60,6 @@ struct NotchView: View {
                 shape.fill(Color.black)
                     .shadow(color: .black.opacity(model.phase == .open ? 0.45 : 0), radius: 14, y: 6)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .animation(Self.spring, value: model.phase)
-            .animation(Self.spring, value: model.alert)
-            .animation(Self.spring, value: model.tab)
     }
 
     /// 모양이 커지는 중에도 내용은 다 펼쳤을 때의 크기로 둔다
@@ -56,7 +83,7 @@ struct NotchView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.6)))
             }
         case .open:
-            DashboardView(notchHeight: model.notchSize.height, stats: stats, fans: fans, tab: $model.tab)
+            DashboardView(topInset: model.notchSize.height, stats: stats, fans: fans, tab: $model.tab, theme: $model.theme)
                 .transition(Self.dashboardTransition)
         case .closed, .hovering:
             EmptyView()

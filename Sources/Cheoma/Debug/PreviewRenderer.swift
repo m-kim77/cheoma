@@ -10,10 +10,12 @@ enum PreviewRenderer {
         let defaults = UserDefaults.standard
         let savedTab = defaults.object(forKey: "dashboardTab")
         let savedRange = defaults.object(forKey: "graphRange")
+        let savedTheme = defaults.object(forKey: "notchTheme")
         defer {
             // 렌더링하느라 바꾼 사용자 설정은 되돌린다
             defaults.set(savedTab, forKey: "dashboardTab")
             defaults.set(savedRange, forKey: "graphRange")
+            defaults.set(savedTheme, forKey: "notchTheme")
         }
 
         let stats = StatsStore()
@@ -29,6 +31,7 @@ enum PreviewRenderer {
         let model = NotchModel()
         let fans = FanController()
         model.notchSize = CGSize(width: 220, height: 38)
+        model.theme = .basic
 
         // 가장 긴 문구까지 귀 안에 들어가는지 본다
         let alerts = [NotchAlert(symbol: "bolt.fill", tint: .green, text: "충전 중 90%"),
@@ -60,6 +63,14 @@ enum PreviewRenderer {
         TimeGraph.previewHoverFraction = 0.62
         render(NotchView(model: model, stats: stats, fans: fans), to: folder.appendingPathComponent("graphs-hover.png"))
         TimeGraph.previewHoverFraction = nil
+
+        // 광화문 테마
+        model.theme = .gwanghwamun
+        for tab in [DashboardTab.overview, .graphs, .fans] {
+            model.previewOpen(tab)
+            render(NotchView(model: model, stats: stats, fans: fans), to: folder.appendingPathComponent("gwanghwamun-\(tab).png"))
+        }
+        model.theme = .basic
     }
 
     private static func render<V: View>(_ view: V, to url: URL) {

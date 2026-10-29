@@ -68,9 +68,7 @@ extension NotchShape {
     static let closed = NotchShape(eave: 6, drop: 6, bottomRadius: 10, lift: 0, flick: 0)
     /// 알림: 양옆 귀에 짧은 곡선, 끝은 들지 않는다
     static let alert = NotchShape(eave: 10, drop: 8, bottomRadius: 12, lift: 0, flick: 0)
-    /// 펼침: 끝이 들린 처마
-    static let open = NotchShape(eave: openEave, drop: 14, bottomRadius: 16, lift: openLift, flick: 25)
-    static let openEave: CGFloat = 22
-    /// 처마 끝이 올라간 높이. 내용은 아래 여백을 이만큼 더 둔다
-    static let openLift: CGFloat = 12
+    /// 펼침(기본 테마): 둥근 네모. 위 양끝만 메뉴바 쪽으로 휜다
+    static let open = NotchShape(eave: openEave, drop: 14, bottomRadius: 30, lift: 0, flick: 0)
+    static let openEave: CGFloat = 14
 }

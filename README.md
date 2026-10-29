@@ -16,6 +16,7 @@ Free, for Apple Silicon Macs on macOS 14 or later.
 ## Features
 
 - **Notch dashboard**: hover over the notch to open it
+  - Shape: click the columns button at the top right of the dashboard (or right-click `⌄` › 노치 모양) to switch between **Basic** (rounded) and **Gwanghwamun** (a black silhouette of the palace gate, with the dashboard set in its stone base)
   - Overview: CPU (per core), GPU, memory, power, network, storage
   - Graphs: CPU, GPU, power and network over 1 minute, 10 minutes, 1 hour or 24 hours (history survives restarts)
   - Power: whole system, CPU, GPU, Neural Engine, memory, display, battery health

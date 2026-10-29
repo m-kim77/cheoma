@@ -146,7 +146,7 @@ struct HiddenItemsView: View {
     private func grid(_ items: [MenuBarItem]) -> some View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
             ForEach(items) { item in
-                ItemTile(item: item) { model.onSelect?(item) }
+                ItemTile(item: item, onDismiss: { model.onDismiss?() }) { model.onSelect?(item) }
             }
         }
     }
@@ -154,6 +154,7 @@ struct HiddenItemsView: View {
 
 private struct ItemTile: View {
     let item: MenuBarItem
+    let onDismiss: () -> Void
     let action: () -> Void
     @State private var isHovering = false
 
@@ -187,6 +188,30 @@ private struct ItemTile: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
+        // 우클릭: 메뉴바 아이콘은 손쉬운 사용으로 "누르기"(왼쪽 클릭)만 할 수 있어서, 앱의 우클릭 메뉴 대신 앱 단위 동작을 보여준다
+        .contextMenu {
+            Button("열기") { action() }
+            if let app = runningApp {
+                if let url = app.bundleURL {
+                    Button("Finder에서 보기") {
+                        onDismiss()
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    }
+                }
+                // 시스템 항목(제어 센터, 입력기 등)은 끄지 않는다
+                if !(app.bundleIdentifier ?? "").hasPrefix("com.apple.") {
+                    Divider()
+                    Button("\(item.appName) 종료") {
+                        onDismiss()
+                        app.terminate()
+                    }
+                }
+            }
+        }
         .help(item.appName == item.label ? item.label : "\(item.appName) — \(item.label)")
+    }
+
+    private var runningApp: NSRunningApplication? {
+        NSRunningApplication(processIdentifier: item.pid)
     }
 }

@@ -11,25 +11,27 @@ enum DashboardTab: String, CaseIterable {
     /// 탭마다 노치가 펼쳐지는 크기 (탭을 바꾸면 스프링으로 늘었다 줄었다 한다)
     var openSize: CGSize {
         switch self {
-        case .graphs: CGSize(width: 744, height: 356)
-        case .overview: CGSize(width: 684, height: 258)
-        case .power: CGSize(width: 684, height: 284)
-        case .thermal: CGSize(width: 684, height: 304)
-        case .fans: CGSize(width: 724, height: 344)
-        case .apps: CGSize(width: 684, height: 314)
+        case .graphs: CGSize(width: 720, height: 352)
+        case .overview: CGSize(width: 660, height: 254)
+        case .power: CGSize(width: 660, height: 280)
+        case .thermal: CGSize(width: 660, height: 300)
+        case .fans: CGSize(width: 700, height: 340)
+        case .apps: CGSize(width: 660, height: 310)
         }
     }
 }
 
 struct DashboardView: View {
-    let notchHeight: CGFloat
+    /// 맨 위 여백. 기본 모양은 노치 높이만큼 비운다
+    let topInset: CGFloat
     @ObservedObject var stats: StatsStore
     let fans: FanController
     @Binding var tab: DashboardTab
+    @Binding var theme: NotchTheme
 
     var body: some View {
         VStack(spacing: 10) {
-            Color.clear.frame(height: notchHeight)
+            Color.clear.frame(height: topInset)
             header
             switch tab {
             case .overview: OverviewTab(snapshot: stats.snapshot, history: stats.history)
@@ -40,10 +42,9 @@ struct DashboardView: View {
             case .apps: AppsTab(apps: stats.snapshot.apps)
             }
         }
-        // 처마 끝(NotchShape.openEave)은 비워 두고 몸통 안쪽에만 그린다
+        // 위 양끝의 휜 부분(NotchShape.openEave)은 비워 두고 몸통 안쪽에만 그린다
         .padding(.horizontal, NotchShape.openEave + 12)
-        // 아래 가장자리는 양끝이 올라가 있으니 그만큼 더 띄운다
-        .padding(.bottom, NotchShape.openLift + 8)
+        .padding(.bottom, 16)
         .foregroundStyle(.white)
     }
 
@@ -68,7 +69,25 @@ struct DashboardView: View {
             if let power = stats.snapshot.power {
                 BatteryBadge(power: power)
             }
+            themeButton
         }
+    }
+
+    /// 노치 모양(기본 ↔ 광화문)을 바로 바꾼다. `⌄` 우클릭 › 노치 모양과 같다
+    private var themeButton: some View {
+        Button {
+            let all = NotchTheme.allCases
+            theme = all[((all.firstIndex(of: theme) ?? 0) + 1) % all.count]
+        } label: {
+            Image(systemName: theme == .basic ? "building.columns" : "building.columns.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 26, height: 26)
+                .background(.white.opacity(theme == .basic ? 0.07 : 0.18), in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help("노치 모양: \(theme.title) (누르면 바뀜)")
+        .accessibilityLabel("노치 모양 바꾸기, 지금 \(theme.title)")
     }
 
     private var tabPicker: some View {

@@ -5,3 +5,7 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 dist/
+
+# 디자인 참고용 사진 (저작권이 있는 이미지라 저장소에 올리지 않는다)
+reference_image/
+.omc/
