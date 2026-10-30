@@ -17,6 +17,8 @@ Cheoma는 맥의 노치에서 같은 일을 한다.
 
 **[Cheoma 내려받기](https://github.com/m-kim77/cheoma/releases/latest/download/Cheoma.zip)** · 무료 · 오픈 소스 · Apple Silicon · macOS 14 이상
 
+> **베타**: 아직 맥 한 대(MacBook Pro M5 Max, macOS 26)에서만 확인했다. 내 맥에서 안 되는 것이 있으면 [이슈](https://github.com/m-kim77/cheoma/issues)로 알려 주세요.
+
 ## 설치
 
 1. [`Cheoma.zip`](https://github.com/m-kim77/cheoma/releases/latest/download/Cheoma.zip)을 내려받아 더블클릭으로 풀고, `Cheoma.app`을 응용 프로그램 폴더로 끌어 옮긴다.
@@ -147,6 +149,8 @@ make && /Applications/Cheoma.app/Contents/MacOS/Cheoma --notify "빌드 성공" 
 Cheoma에는 네트워크 코드가 없다. 사용 통계도, 업데이트 확인도, 계정도 없다. 측정한 값은 모두 내 맥 안에만 남는다.
 
 ## 업데이트
+
+Cheoma는 아직 스스로 업데이트하지 않는다. 새 버전 소식을 받으려면 이 페이지 위쪽의 **Watch** › **Custom** › **Releases**를 켜 둔다.
 
 1. Cheoma를 끈다: `⌄` 우클릭 › **종료**.
 2. 새 [`Cheoma.zip`](https://github.com/m-kim77/cheoma/releases/latest/download/Cheoma.zip)을 받아 응용 프로그램 폴더의 `Cheoma.app`을 바꾼다. macOS가 **그래도 열기**를 다시 물을 수 있다.

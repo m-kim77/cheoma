@@ -17,6 +17,8 @@ Cheoma does the same for your MacBook's notch:
 
 **[Download Cheoma](https://github.com/m-kim77/cheoma/releases/latest/download/Cheoma.zip)** · free and open source · Apple Silicon · macOS 14 or later · the interface is in Korean (this page translates every label)
 
+> **Beta.** So far Cheoma has been tested on one Mac: a MacBook Pro (M5 Max) on macOS 26. If something doesn't work on yours, please [open an issue](https://github.com/m-kim77/cheoma/issues).
+
 ## Install
 
 1. Download [`Cheoma.zip`](https://github.com/m-kim77/cheoma/releases/latest/download/Cheoma.zip), double-click it to unzip, and drag `Cheoma.app` into your Applications folder.
@@ -144,6 +146,8 @@ The dashboard, sensors and alerts need no permission.
 Cheoma has no network code: no analytics, no update checks, no accounts. Everything it measures stays on your Mac.
 
 ## Update
+
+Cheoma doesn't update itself yet. To hear about new versions, click **Watch** › **Custom** › **Releases** at the top of this page.
 
 1. Quit Cheoma: right-click `⌄` › **종료** (Quit).
 2. Download the new [`Cheoma.zip`](https://github.com/m-kim77/cheoma/releases/latest/download/Cheoma.zip) and replace `Cheoma.app` in Applications. macOS may ask you to confirm **Open Anyway** again.
