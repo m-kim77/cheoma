@@ -30,6 +30,19 @@ final class NotchWindowController {
             .sink { [weak panel] isOpen in panel?.ignoresMouseEvents = !isOpen }
             .store(in: &cancellables)
 
+        // 에이전트 탭이 펼쳐져 있는 동안만 키 창이 될 수 있다 (답 입력). 닫히거나 다른 탭으로 가면 키보드를 원래 앱에 돌려준다
+        model.$isOpen.combineLatest(model.$tab)
+            .map { isOpen, tab in isOpen && tab == .agents }
+            .removeDuplicates()
+            .sink { [weak self] allowed in self?.setKeyFocusAllowed(allowed) }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: OverlayPanel.requestKeyFocusNotification)
+            .sink { [weak panel] _ in panel?.takeKeyFocus() }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: OverlayPanel.releaseKeyFocusNotification)
+            .sink { [weak panel] _ in panel?.giveUpKeyFocus() }
+            .store(in: &cancellables)
+
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .sink { [weak self] _ in self?.layout() }
             .store(in: &cancellables)
@@ -47,6 +60,13 @@ final class NotchWindowController {
 
         layout()
         panel.orderFrontRegardless()
+    }
+
+    private func setKeyFocusAllowed(_ allowed: Bool) {
+        panel.acceptsKeyFocus = allowed
+        guard !allowed else { return }
+        model.keepsOpen = false
+        panel.giveUpKeyFocus()
     }
 
     private func layout() {

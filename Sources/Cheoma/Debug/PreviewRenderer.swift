@@ -73,7 +73,43 @@ enum PreviewRenderer {
         }
         model.theme = .basic
 
+        renderAgents(model: model, stats: stats, fans: fans, agents: agents, folder: folder)
         checkOverflow(model: model, stats: stats, fans: fans, agents: agents)
+    }
+
+    /// 에이전트 탭의 여러 모습: tmux 세션(특수 키), 세션 없음, 새 에이전트 고르기, 연결 설정. 두 테마 모두
+    private static func renderAgents(model: NotchModel, stats: StatsStore, fans: FanController, agents: AgentStore, folder: URL) {
+        let empty = AgentStore()
+        let savedSelection = agents.selectedID
+        AgentReplyField.drawsPlaceholderOnly = true
+        defer {
+            AgentReplyField.drawsPlaceholderOnly = false
+            agents.select(savedSelection)
+            AgentsTab.previewPane = nil
+            model.theme = .basic
+        }
+        for theme in NotchTheme.allCases {
+            model.theme = theme
+            let prefix = theme == .basic ? "agents" : "gwanghwamun-agents"
+            for (name, store, pane, selection) in agentVariants(agents: agents, empty: empty) {
+                AgentsTab.previewPane = pane
+                if let selection { store.select(selection) }
+                model.previewOpen(.agents)
+                render(NotchView(model: model, stats: stats, fans: fans, agents: store),
+                       to: folder.appendingPathComponent("\(prefix)-\(name).png"))
+            }
+        }
+    }
+
+    private static func agentVariants(agents: AgentStore, empty: AgentStore)
+        -> [(name: String, store: AgentStore, pane: AgentsPane, selection: AgentSession.ID?)] {
+        [("choice", agents, .session, "terminal:/dev/ttys004"),
+         ("tmux", agents, .session, "tmux:%3"),
+         ("input", agents, .session, "tmux:%5"),
+         ("empty", empty, .session, nil),
+         ("launcher", agents, .launcher, "terminal:/dev/ttys004"),
+         ("launcher-no-tmux", empty, .launcher, nil),
+         ("setup", agents, .setup, "terminal:/dev/ttys004")]
     }
 
     /// 탭마다 내용이 펼친 크기 안에 들어가는지 잰다. 넘치면 아래쪽이 모양에 잘려 안 보인다
@@ -95,6 +131,24 @@ enum PreviewRenderer {
                 let verdict = needed > size.height + 0.5 ? "넘침" : "맞음"
                 print("\(verdict) \(theme) \(tab): 내용 \(Int(needed.rounded(.up))) / 자리 \(Int(size.height))")
             }
+            // 에이전트 탭은 모습마다 높이가 달라서 따로 잰다
+            model.tab = .agents
+            let size = model.dashboardSize
+            let topInset = theme == .basic ? model.notchSize.height : Gwanghwamun.dashboardTopInset
+            for variant in agentVariants(agents: agents, empty: AgentStore()) {
+                AgentsTab.previewPane = variant.pane
+                let saved = variant.store.selectedID
+                if let selection = variant.selection { variant.store.select(selection) }
+                let view = DashboardView(topInset: topInset, stats: stats, fans: fans, agents: variant.store, model: model,
+                                         tab: .constant(.agents), theme: .constant(theme))
+                    .frame(width: size.width)
+                    .environment(\.colorScheme, .dark)
+                let needed = NSHostingController(rootView: view).sizeThatFits(in: CGSize(width: size.width, height: 0)).height
+                variant.store.select(saved)
+                let verdict = needed > size.height + 0.5 ? "넘침" : "맞음"
+                print("\(verdict) \(theme) agents-\(variant.name): 내용 \(Int(needed.rounded(.up))) / 자리 \(Int(size.height))")
+            }
+            AgentsTab.previewPane = nil
         }
     }
 

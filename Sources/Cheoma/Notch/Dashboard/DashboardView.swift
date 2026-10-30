@@ -19,7 +19,7 @@ enum DashboardTab: String, CaseIterable {
         case .thermal: CGSize(width: 660, height: 300)
         case .fans: CGSize(width: 700, height: 340)
         case .apps: CGSize(width: 660, height: 318)
-        case .agents: CGSize(width: 720, height: 372)
+        case .agents: CGSize(width: 760, height: 404)
         }
     }
 }
