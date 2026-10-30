@@ -4,14 +4,21 @@
 #   scripts/build-app.sh --install  ~/Applications/Cheoma.app 에도 복사
 # 환경 변수
 #   JOBS            빌드 동시 작업 수 (기본 2: 팬이 덜 돈다)
-#   SIGN_IDENTITY   서명 인증서 이름. 예: "Developer ID Application: 이름 (TEAMID)". 없으면 ad-hoc 서명
+#   SIGN_IDENTITY   서명 인증서 이름. 예: "Developer ID Application: 이름 (TEAMID)".
+#                   없으면 키체인의 Developer ID → Apple Development 인증서 순으로 고르고, 둘 다 없으면 ad-hoc 서명.
+#                   ad-hoc 서명은 빌드할 때마다 서명이 바뀌어서 손쉬운 사용 권한을 매번 다시 줘야 한다
 #   NOTARY_PROFILE  공증에 쓸 notarytool 키체인 프로필 이름 (xcrun notarytool store-credentials로 만든다).
 #                   있으면 Apple 공증을 받고 배포용 dist/Cheoma.zip을 만든다
 set -e
 cd "$(dirname "$0")/.."
 
 JOBS="${JOBS:-2}"
-IDENTITY="${SIGN_IDENTITY:--}"
+find_identity() {
+    security find-identity -v -p codesigning 2>/dev/null | grep "\"$1" | head -n 1 | awk '{print $2}'
+}
+IDENTITY="${SIGN_IDENTITY:-$(find_identity "Developer ID Application")}"
+IDENTITY="${IDENTITY:-$(find_identity "Apple Development")}"
+IDENTITY="${IDENTITY:--}"
 nice -n 10 swift build -c release -j "$JOBS" --product Cheoma
 nice -n 10 swift build -c release -j "$JOBS" --product CheomaFanHelper
 BIN="$(swift build -c release --show-bin-path)"
