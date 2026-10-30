@@ -23,6 +23,9 @@
     <!-- Dock 아이콘 없이 메뉴바에서만 동작 -->
     <key>LSUIElement</key>
     <true/>
+    <!-- Terminal 자동화 권한을 물을 때 macOS가 보여주는 설명 -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Terminal에서 도는 코드 에이전트의 화면을 노치에 보여 주고, 노치에서 입력한 답을 그 탭으로 보내려면 필요해요.</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 m-kim77. GPL-3.0 License.</string>
     <key>NSHighResolutionCapable</key>

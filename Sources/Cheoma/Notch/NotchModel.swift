@@ -25,7 +25,7 @@ final class NotchModel: ObservableObject {
     }()
     private static let tabDefaultsKey = "dashboardTab"
     private static let openDelay: TimeInterval = 0.18
-    private static let alertDuration: TimeInterval = 2.8
+    static let alertDuration: TimeInterval = 2.8
 
     @Published var notchSize = CGSize(width: 185, height: 32)
     @Published private(set) var isOpen = false
@@ -61,6 +61,8 @@ final class NotchModel: ObservableObject {
 
     private var openWork: DispatchWorkItem?
     private var alertWork: DispatchWorkItem?
+    /// 알림이 떠 있는 동안 노치에 마우스를 올리면 열 탭 (에이전트 알림 → 에이전트 탭)
+    private var alertTab: DashboardTab?
 
     var phase: Phase {
         if isOpen { return .open }
@@ -90,6 +92,7 @@ final class NotchModel: ObservableObject {
         // 메뉴바 지나가다 실수로 열리지 않도록 짧게 머물러야 열림
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.isHovering else { return }
+            if self.alert != nil, let tab = self.alertTab { self.tab = tab }
             self.isOpen = true
         }
         openWork = work
@@ -102,11 +105,15 @@ final class NotchModel: ObservableObject {
         isOpen = true
     }
 
-    func show(_ alert: NotchAlert) {
+    func show(_ alert: NotchAlert, duration: TimeInterval = alertDuration, opening tab: DashboardTab? = nil) {
         self.alert = alert
+        alertTab = tab
         alertWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.alert = nil }
+        let work = DispatchWorkItem { [weak self] in
+            self?.alert = nil
+            self?.alertTab = nil
+        }
         alertWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.alertDuration, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
     }
 }

@@ -35,7 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notchController = NotchWindowController(model: notchModel, stats: stats, fans: fans, agents: agents)
         agents.onAlert = { [weak self] alert, id in
             self?.agents.select(id)
-            self?.notchModel.show(alert)
+            // 답이 필요한 알림은 조금 더 오래 띄우고, 그동안 노치에 마우스를 올리면 그 세션이 열린다
+            self?.notchModel.show(alert, duration: 6, opening: .agents)
         }
         agents.start()
 

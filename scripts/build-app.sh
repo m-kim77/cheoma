@@ -39,7 +39,8 @@ if [ "$IDENTITY" != "-" ]; then
 fi
 # 안쪽 실행 파일부터 서명한 뒤 번들 전체를 서명한다
 codesign $SIGN_FLAGS --sign "$IDENTITY" "$APP/Contents/MacOS/CheomaFanHelper"
-codesign $SIGN_FLAGS --sign "$IDENTITY" "$APP"
+# 앱 본체에는 Terminal에 Apple Event를 보낼 수 있는 권한(entitlement)을 넣는다
+codesign $SIGN_FLAGS --entitlements Support/Cheoma.entitlements --sign "$IDENTITY" "$APP"
 echo "만들었어요: $APP (서명: $IDENTITY)"
 
 if [ -n "$NOTARY_PROFILE" ]; then
