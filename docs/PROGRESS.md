@@ -64,6 +64,24 @@
 - 앱 탭은 내 계정 프로세스만 보인다. WindowServer, kernel_task 같은 시스템 프로세스는 권한이 없어 빠진다 (이 맥에서는 1004개 중 637개를 읽을 수 있었다).
 - 앱 탭의 "CPU 전력"은 CPU 몫만 추정한 값이다. GPU를 많이 쓰는 앱(게임, LLM)은 실제보다 작게 나온다.
 
+## 이어서 할 일: 에이전트 탭 (2026-10-30 저녁에 멈춤)
+
+노치에 코드 에이전트(Claude Code · Codex · OpenCode · pi) 탭을 넣는 중이다. 사용자가 고른 방식: **Terminal.app + tmux**, 첫 버전에 목록·상태·알림, 미리보기·답·선택지, 새 에이전트 실행, 사용량을 모두 넣는다.
+
+- 기준 브랜치 `agents` (d136a13, 빌드 통과): 공통 타입(`Sources/Cheoma/Agents/AgentModels.swift`), 모듈별 틀(서명 고정), 실제 `AgentStore`(세션 찾기·상태 판단·알림·보내기·실행), 알림 → 에이전트 탭 열기, Apple Events entitlement(`Support/Cheoma.entitlements`)와 `NSAppleEventsUsageDescription`.
+- 서브에이전트 4개가 각자 워크트리에서 만들다가 멈췄다. 작업은 브랜치에 WIP 커밋으로 남겼다 (빌드 확인 안 함):
+
+| 브랜치 | 워크트리 (`.claude/worktrees/…`) | 맡은 일 | 멈춘 곳 |
+|---|---|---|---|
+| `agents-bridges` (162c20a) | `agent-a1b019708446e06c9` | `AgentScanner`(libproc), `TerminalAppBridge`(osascript), `TmuxBridge`, `--agents` | 덤프·셀프테스트 작성 중 |
+| `agents-parser` (bce8b82) | `agent-a5cecb63518a133f2` | `AgentScreenParser`, `ANSIText`, `--parse-screen`, 실제 화면 모음 `scripts/agent-screens/` | 화면만 모았고 파서 코드는 아직 |
+| `agents-usage` (f70bb5e) | `agent-af1c3968cec9591a8` | `AgentUsageReader`(Codex rate_limits, Claude 비용·토큰), `AgentHooks`, `HookInstaller`, `--usage` | 기록 읽기 일부, 훅·설치기는 아직 |
+| `agents-ui` (6df72d7) | `agent-adaaba1cef8a71dd0` | 에이전트 탭 화면(`Agents*.swift`), 노치 키보드 입력, `--render` | 화면 파일 대부분, 렌더 추가 중 |
+
+- 이어서 하는 법: 각 브랜치를 `agents`에 합치고(서로 다른 파일만 고쳐서 충돌이 거의 없다) `swift build`로 고친 뒤, 못 끝낸 부분을 마저 만든다. 서브에이전트에 준 지시는 이 세션 기록에 있고, 계약은 `AgentModels.swift`와 각 틀 파일의 주석이다.
+- 확인한 사실: Codex 기록(`~/.codex/sessions/**/rollout-*.jsonl`)의 `token_count` 이벤트에 5시간·주간 사용 %가 있다. Claude의 남은 한도는 문서상 statusLine 입력의 `rate_limits`(five_hour, seven_day)로만 받을 수 있다. Claude 훅 Notification에는 `notification_type`(permission_prompt ~6초 뒤, idle_prompt ~60초 뒤)이 있고, Stop에는 `last_assistant_message`가 있다. `claude agents --json`도 세션 상태를 준다 (대화형 세션이 보이는지는 시험 필요).
+- Terminal.app은 `do script`가 늘 Enter를 같이 보내고 특수 키는 못 보낸다. tmux는 다 된다. Terminal 자동화 권한은 사용자가 버튼을 눌렀을 때만 묻는다.
+
 ## 작업 기록
 
 ### 2026-10-30
