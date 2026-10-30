@@ -18,9 +18,10 @@ BIN="$(swift build -c release --show-bin-path)"
 
 APP="dist/Cheoma.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/Cheoma" "$BIN/CheomaFanHelper" "$APP/Contents/MacOS/"
 cp Support/Info.plist "$APP/Contents/Info.plist"
+cp Support/AppIcon.icns "$APP/Contents/Resources/"
 
 # 배포판과 같은 조건(hardened runtime)으로 서명해서 개발 중에도 같은 제약에서 돌려본다.
 # 인증서로 서명할 때는 공증에 필요한 보안 타임스탬프도 넣는다
