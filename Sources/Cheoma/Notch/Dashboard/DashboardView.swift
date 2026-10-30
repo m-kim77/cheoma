@@ -7,6 +7,7 @@ enum DashboardTab: String, CaseIterable {
     case thermal = "온도"
     case fans = "팬"
     case apps = "앱"
+    case agents = "에이전트"
 
     /// 탭마다 노치가 펼쳐지는 크기 (탭을 바꾸면 스프링으로 늘었다 줄었다 한다).
     /// 내용이 다 들어가는지는 `--render`가 탭마다 재서 알려준다
@@ -18,6 +19,7 @@ enum DashboardTab: String, CaseIterable {
         case .thermal: CGSize(width: 660, height: 300)
         case .fans: CGSize(width: 700, height: 340)
         case .apps: CGSize(width: 660, height: 318)
+        case .agents: CGSize(width: 720, height: 372)
         }
     }
 }
@@ -27,6 +29,8 @@ struct DashboardView: View {
     let topInset: CGFloat
     @ObservedObject var stats: StatsStore
     let fans: FanController
+    let agents: AgentStore
+    let model: NotchModel
     @Binding var tab: DashboardTab
     @Binding var theme: NotchTheme
 
@@ -41,6 +45,7 @@ struct DashboardView: View {
             case .thermal: ThermalTab(thermal: stats.snapshot.thermal, history: stats.history)
             case .fans: FanTab(thermal: stats.snapshot.thermal, controller: fans)
             case .apps: AppsTab(apps: stats.snapshot.apps)
+            case .agents: AgentsTab(store: agents, model: model)
             }
         }
         // 위 양끝의 휜 부분(NotchShape.openEave)은 비워 두고 몸통 안쪽에만 그린다

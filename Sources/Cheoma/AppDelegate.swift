@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let notchModel = NotchModel()
     private let stats = StatsStore()
     private let fans = FanController()
+    private let agents = AgentStore()
     private var notchController: NotchWindowController?
     private var statusBar: StatusBarController?
     private let systemEvents = SystemEventMonitor()
@@ -22,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.stats.isDashboardOpen = isOpen
                 self?.stats.showsApps = isOpen && tab == .apps
                 self?.stats.showsFans = isOpen && (tab == .fans || tab == .thermal)
+                self?.agents.isVisible = isOpen && tab == .agents
             }
             .store(in: &cancellables)
         // 온도를 새로 읽을 때마다 팬 모드(고정 · 온도별)를 맞춰 둔다
@@ -30,7 +32,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .removeDuplicates()
             .sink { [weak self] thermal in self?.fans.temperatureChanged(thermal) }
             .store(in: &cancellables)
-        notchController = NotchWindowController(model: notchModel, stats: stats, fans: fans)
+        notchController = NotchWindowController(model: notchModel, stats: stats, fans: fans, agents: agents)
+        agents.onAlert = { [weak self] alert, id in
+            self?.agents.select(id)
+            self?.notchModel.show(alert)
+        }
+        agents.start()
 
         let statusBar = StatusBarController()
         statusBar.onTestAlert = { [weak self] in

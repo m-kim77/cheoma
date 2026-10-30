@@ -8,6 +8,22 @@ enum CheomaApp {
             NotifyCommand.send(arguments: Array(CommandLine.arguments[(index + 1)...]))
             return
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--agent-event") {
+            AgentHooks.send(arguments: Array(CommandLine.arguments[(index + 1)...]))
+            return
+        }
+        if CommandLine.arguments.contains("--agents") {
+            AgentsDump.run()
+            return
+        }
+        if CommandLine.arguments.contains("--usage") {
+            UsageDump.run()
+            return
+        }
+        if let index = CommandLine.arguments.firstIndex(of: "--parse-screen") {
+            ParseScreenCommand.run(arguments: Array(CommandLine.arguments[(index + 1)...]))
+            return
+        }
         if CommandLine.arguments.contains("--stats") {
             StatsDump.run()
             return

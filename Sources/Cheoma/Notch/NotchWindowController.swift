@@ -14,14 +14,14 @@ final class NotchWindowController {
     private static let windowSize = CGSize(width: NotchModel.maxOpenSize.width + 60,
                                            height: NotchModel.maxOpenSize.height + 40)
 
-    init(model: NotchModel, stats: StatsStore, fans: FanController) {
+    init(model: NotchModel, stats: StatsStore, fans: FanController, agents: AgentStore) {
         self.model = model
         panel = OverlayPanel(size: Self.windowSize)
         // 메뉴바보다 위에 그려야 노치 영역을 덮을 수 있음
         panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) + 3)
         panel.ignoresMouseEvents = true
 
-        let hosting = FirstMouseHostingView(rootView: NotchView(model: model, stats: stats, fans: fans))
+        let hosting = FirstMouseHostingView(rootView: NotchView(model: model, stats: stats, fans: fans, agents: agents))
         hosting.sizingOptions = []
         panel.contentView = hosting
 

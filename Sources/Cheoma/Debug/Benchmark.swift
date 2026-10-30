@@ -28,7 +28,7 @@ enum Benchmark {
         panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) + 3)
         panel.ignoresMouseEvents = true
         panel.alphaValue = 0.01
-        panel.contentView = FirstMouseHostingView(rootView: NotchView(model: model, stats: stats, fans: fans))
+        panel.contentView = FirstMouseHostingView(rootView: NotchView(model: model, stats: stats, fans: fans, agents: AgentStore.preview()))
         if let screen = NSScreen.main {
             panel.setFrameOrigin(CGPoint(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height))
         }

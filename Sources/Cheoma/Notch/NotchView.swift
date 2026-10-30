@@ -4,6 +4,7 @@ struct NotchView: View {
     @ObservedObject var model: NotchModel
     let stats: StatsStore
     let fans: FanController
+    let agents: AgentStore
 
     private static let spring = Animation.spring(response: 0.42, dampingFraction: 0.78)
 
@@ -30,7 +31,8 @@ struct NotchView: View {
             .frame(width: size.width, height: size.height)
             .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
             .transition(.scale(scale: 0.3, anchor: .top).combined(with: .opacity))
-        DashboardView(topInset: Gwanghwamun.dashboardTopInset, stats: stats, fans: fans, tab: $model.tab, theme: $model.theme)
+        DashboardView(topInset: Gwanghwamun.dashboardTopInset, stats: stats, fans: fans, agents: agents, model: model,
+                      tab: $model.tab, theme: $model.theme)
             .frame(width: content.width, height: content.height, alignment: .top)
             .padding(.top, Gwanghwamun.contentTop(content: content))
             .transition(Self.dashboardTransition)
@@ -83,7 +85,8 @@ struct NotchView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.6)))
             }
         case .open:
-            DashboardView(topInset: model.notchSize.height, stats: stats, fans: fans, tab: $model.tab, theme: $model.theme)
+            DashboardView(topInset: model.notchSize.height, stats: stats, fans: fans, agents: agents, model: model,
+                          tab: $model.tab, theme: $model.theme)
                 .transition(Self.dashboardTransition)
         case .closed, .hovering:
             EmptyView()

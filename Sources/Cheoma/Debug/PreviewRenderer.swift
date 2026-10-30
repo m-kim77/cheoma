@@ -30,6 +30,7 @@ enum PreviewRenderer {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let model = NotchModel()
         let fans = FanController()
+        let agents = AgentStore.preview()
         model.notchSize = CGSize(width: 220, height: 38)
         model.theme = .basic
 
@@ -38,12 +39,12 @@ enum PreviewRenderer {
                       WarningAlerts.thermal(.critical), WarningAlerts.memory(.critical), WarningAlerts.battery(level: 10)]
         for (index, alert) in alerts.compactMap({ $0 }).enumerated() {
             model.show(alert)
-            render(NotchView(model: model, stats: stats, fans: fans), to: folder.appendingPathComponent("alert-\(index).png"))
+            render(NotchView(model: model, stats: stats, fans: fans, agents: agents), to: folder.appendingPathComponent("alert-\(index).png"))
         }
 
         for tab in DashboardTab.allCases {
             model.previewOpen(tab)
-            render(NotchView(model: model, stats: stats, fans: fans), to: folder.appendingPathComponent("tab-\(tab).png"))
+            render(NotchView(model: model, stats: stats, fans: fans, agents: agents), to: folder.appendingPathComponent("tab-\(tab).png"))
         }
         // 팬 탭: 도우미가 설치된 것처럼 모드마다 그린다
         let fanPreviews: [(name: String, mode: FanController.Mode, linked: Bool)] = [
@@ -52,31 +53,31 @@ enum PreviewRenderer {
         for preview in fanPreviews {
             fans.preview(mode: preview.mode, temperature: 72, linked: preview.linked)
             model.previewOpen(.fans)
-            render(NotchView(model: model, stats: stats, fans: fans), to: folder.appendingPathComponent("fans-\(preview.name).png"))
+            render(NotchView(model: model, stats: stats, fans: fans, agents: agents), to: folder.appendingPathComponent("fans-\(preview.name).png"))
         }
         for range in GraphRange.allCases {
             defaults.set(range.rawValue, forKey: "graphRange")
             model.previewOpen(.graphs)
-            render(NotchView(model: model, stats: stats, fans: fans), to: folder.appendingPathComponent("graphs-\(range).png"))
+            render(NotchView(model: model, stats: stats, fans: fans, agents: agents), to: folder.appendingPathComponent("graphs-\(range).png"))
         }
         defaults.set(GraphRange.minute.rawValue, forKey: "graphRange")
         TimeGraph.previewHoverFraction = 0.62
-        render(NotchView(model: model, stats: stats, fans: fans), to: folder.appendingPathComponent("graphs-hover.png"))
+        render(NotchView(model: model, stats: stats, fans: fans, agents: agents), to: folder.appendingPathComponent("graphs-hover.png"))
         TimeGraph.previewHoverFraction = nil
 
         // 광화문 테마
         model.theme = .gwanghwamun
         for tab in DashboardTab.allCases {
             model.previewOpen(tab)
-            render(NotchView(model: model, stats: stats, fans: fans), to: folder.appendingPathComponent("gwanghwamun-\(tab).png"))
+            render(NotchView(model: model, stats: stats, fans: fans, agents: agents), to: folder.appendingPathComponent("gwanghwamun-\(tab).png"))
         }
         model.theme = .basic
 
-        checkOverflow(model: model, stats: stats, fans: fans)
+        checkOverflow(model: model, stats: stats, fans: fans, agents: agents)
     }
 
     /// 탭마다 내용이 펼친 크기 안에 들어가는지 잰다. 넘치면 아래쪽이 모양에 잘려 안 보인다
-    private static func checkOverflow(model: NotchModel, stats: StatsStore, fans: FanController) {
+    private static func checkOverflow(model: NotchModel, stats: StatsStore, fans: FanController, agents: AgentStore) {
         let savedTheme = model.theme
         defer { model.theme = savedTheme }
         for theme in NotchTheme.allCases {
@@ -85,7 +86,8 @@ enum PreviewRenderer {
                 model.tab = tab
                 let size = model.dashboardSize
                 let topInset = theme == .basic ? model.notchSize.height : Gwanghwamun.dashboardTopInset
-                let view = DashboardView(topInset: topInset, stats: stats, fans: fans, tab: .constant(tab), theme: .constant(theme))
+                let view = DashboardView(topInset: topInset, stats: stats, fans: fans, agents: agents, model: model,
+                                         tab: .constant(tab), theme: .constant(theme))
                     .frame(width: size.width)
                     .environment(\.colorScheme, .dark)
                 // 높이를 0으로 제안하면 그래프처럼 늘었다 줄었다 하는 부분은 최소 크기로 줄고, 글자는 제 크기를 지킨다

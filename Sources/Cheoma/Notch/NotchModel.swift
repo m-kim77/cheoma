@@ -39,6 +39,9 @@ final class NotchModel: ObservableObject {
         didSet { NotchTheme.saved = theme }
     }
 
+    /// true인 동안은 마우스가 벗어나도 닫지 않는다 (에이전트에 보낼 답을 입력하는 중)
+    @Published var keepsOpen = false
+
     /// 펼쳤을 때 모양 전체의 크기
     var openSize: CGSize {
         switch theme {
@@ -77,7 +80,7 @@ final class NotchModel: ObservableObject {
 
     func updateMouse(inHotZone: Bool, inOpenZone: Bool) {
         if isOpen {
-            if !inOpenZone { isOpen = false; isHovering = false }
+            if !inOpenZone && !keepsOpen { isOpen = false; isHovering = false }
             return
         }
         if isHovering != inHotZone { isHovering = inHotZone }
