@@ -8,6 +8,9 @@
 - **추가 비용 없이** 한다. Apple Developer Program(연 99달러)은 나중에 필요해지면 가입한다. 그 전까지는 아래 "무료로 배포하기"대로 간다.
 - 이름은 **Cheoma(처마)**. 처음 이름인 NotchBar는 이미 다른 프로젝트 여럿이 쓰고 있어서 바꿨다 (navtoj/NotchBar, azu/notchbar 등). 번들 ID는 `io.github.m-kim77.cheoma`.
 - 라이선스는 GPL-3.0. 저장소는 `github.com/m-kim77/cheoma`이고, 첫 릴리스 전까지는 비공개로 둔다.
+  - (2026-10-30) README·스크린샷과 v0.1.0 zip은 준비했고, 공개는 아직 정하지 않았다. 공개하기 전에 커밋 작성자 이메일을 GitHub noreply 주소(`69665461+m-kim77@users.noreply.github.com`)로 바꿀지 정한다 (GitHub 프로필에서는 이메일을 숨겨 두었다).
+  - 비공개 저장소는 주소만 알려 줘서는 남이 볼 수 없다. 공개 전에는 GitHub 협업자로 초대하거나 (개인 저장소의 협업자는 푸시도 할 수 있다) zip을 직접 보낸다.
+- README는 영어(기본)와 한국어 두 가지로 유지한다 (2026-10-30). 앱 화면이 한국어뿐이라 다른 언어 README는 앱을 그 언어로 번역할 때 같이 만든다. 영어판은 한국어 UI 이름마다 번역을 달아 둔다.
 - Homebrew는 나중에 한다.
 
 ## 무료로 배포하기
@@ -20,11 +23,11 @@
 | 앱 내려받기 | GitHub Releases에 zip 올리기 | 무료 |
 | 자동 빌드 (선택) | GitHub Actions (공개 저장소는 macOS 빌드도 무료) | 무료 |
 | 소개 페이지 (선택) | README, 또는 GitHub Pages(`아이디.github.io`) | 무료 |
-| 서명 | ad-hoc 서명 (지금과 같음) | 무료 |
+| 서명 | ad-hoc 서명 (`SIGN_IDENTITY=-`) | 무료 |
 
 Developer ID가 없어서 생기는 일과 대응:
 
-- **처음 열 때 macOS가 막는다.** 인터넷에서 받은 서명 안 된 앱이라서다. macOS 15부터는 우클릭 › 열기로 넘어갈 수 없고, 시스템 설정 › 개인정보 보호 및 보안 › 맨 아래 "그래도 열기"를 눌러야 한다. README 설치 방법에 그림과 함께 적는다. 터미널을 쓰는 사람은 `xattr -dr com.apple.quarantine /Applications/<앱>.app`으로도 된다.
+- **처음 열 때 macOS가 막는다.** 인터넷에서 받은 서명 안 된 앱이라서다. macOS 15부터는 우클릭 › 열기로 넘어갈 수 없고, 시스템 설정 › 개인정보 보호 및 보안 › 맨 아래 "그래도 열기"를 눌러야 한다. README 설치 방법에 macOS 버전별로 적었다 (2026-10-30). 터미널을 쓰는 사람은 `xattr -dr com.apple.quarantine /Applications/<앱>.app`으로도 된다.
 - **업데이트할 때마다 손쉬운 사용 권한을 다시 줘야 한다.** ad-hoc 서명은 빌드마다 서명이 달라져서 macOS가 다른 앱으로 본다. 시스템 설정에는 켜져 있는데 동작하지 않는 상태가 되므로, 앱이 이걸 알아채고 "목록에서 지우고 다시 허용" 방법을 안내해야 한다.
   - 무료로 피하는 방법은 자체 서명 인증서 하나로 매번 서명하는 것이다. 그러면 업데이트해도 권한이 유지된다 (처음 열 때 막히는 건 같다). 2026-10-29 개발용으로는 쓰지 않기로 했다. 배포용으로 쓸지는 아직 정하지 않았다.
 - **팬 도우미**: 지금 방식(관리자 암호로 설치)은 서명 없이도 된다. SMAppService 방식은 Developer ID가 있어야 해서, 가입 전까지는 지금 방식을 유지한다.
@@ -40,7 +43,7 @@ macOS는 손쉬운 사용 권한을 줄 때 앱의 서명 정보도 같이 기�
 
 | 서명 | 다른 맥에서 처음 열 때 | 업데이트 후 권한 |
 |---|---|---|
-| ad-hoc (지금) | 막힌다. 시스템 설정 › 개인정보 보호 및 보안 › "그래도 열기"를 눌러야 한다 | 매번 다시 줘야 한다 |
+| ad-hoc (릴리스) | 막힌다. 시스템 설정 › 개인정보 보호 및 보안 › "그래도 열기"를 눌러야 한다 | 매번 다시 줘야 한다 |
 | 자체 서명 인증서 | 막힌다 (위와 같음) | 같은 인증서로 서명하면 유지된다 |
 | Developer ID + 공증 | 바로 열린다 | 같은 팀으로 서명하면 유지된다 |
 
@@ -55,6 +58,25 @@ App Store 앱은 샌드박스 안에서만 돌아야 하는데, Cheoma의 핵심
 - `scripts/build-app.sh`에 `SIGN_IDENTITY`(Developer ID 인증서 이름)를 주면 그 인증서로 서명한다. `NOTARY_PROFILE`까지 주면 Apple 공증을 받고 배포용 `dist/Cheoma.zip`을 만든다.
 - 개발 빌드도 배포판과 같은 hardened runtime으로 서명한다. 이 조건에서 센서(SMC, IOReport)가 동작하는 것을 확인했다 (2026-10-29). 손쉬운 사용과 팬 도우미는 권한을 다시 받은 뒤 확인한다.
 - 팬 도우미는 설치할 때 버전을 적어 둔다. 업데이트로 도우미가 바뀌면 앱이 "다시 설치"를 안내한다.
+- 개발 빌드는 키체인의 Apple Development 인증서로 자동 서명한다 (2026-10-30). 다시 빌드해도 손쉬운 사용 권한이 유지된다. 이 인증서는 배포용이 아니라서 릴리스는 `SIGN_IDENTITY=-`(ad-hoc)로 만든다.
+- README(영어·한국어): 설치(macOS 버전별 "그래도 열기"), 쓰는 법, 권한, 개인정보, 업데이트, 지우기, 문제 해결. 스크린샷은 `--render`로 만들어 `docs/images/`에 둔다.
+- ad-hoc + hardened runtime 릴리스를 zip에서 풀어도 서명이 유효하고(`codesign --verify --deep --strict`) 센서가 동작하는 것(`--stats`)을 확인했다 (2026-10-30).
+
+## 릴리스 내는 법 (Developer ID 없이)
+
+1. `Support/Info.plist`의 `CFBundleShortVersionString`(예: 0.1.1)과 `CFBundleVersion`(1씩)을 올리고 커밋한다.
+2. ad-hoc으로 빌드하고 zip을 만든다. zip 이름은 늘 `Cheoma.zip`이다. README의 내려받기 링크(`releases/latest/download/Cheoma.zip`)가 이 이름을 가리킨다.
+   ```sh
+   SIGN_IDENTITY=- scripts/build-app.sh
+   rm -f dist/Cheoma.zip && ditto -c -k --keepParent dist/Cheoma.app dist/Cheoma.zip
+   shasum -a 256 dist/Cheoma.zip
+   ```
+   `--install`은 붙이지 않는다. 내 맥의 앱이 ad-hoc 서명으로 바뀌면 손쉬운 사용 권한이 다시 풀린다.
+3. 태그를 달고 GitHub 릴리스에 zip을 올린다. 릴리스 노트에는 바뀐 점과 SHA-256을 적는다.
+   ```sh
+   git tag v0.1.1 && git push origin v0.1.1
+   gh release create v0.1.1 dist/Cheoma.zip --title "Cheoma 0.1.1" --notes-file <노트 파일>
+   ```
 
 ## 직접 해야 하는 것 (Developer ID로 바꿀 때)
 
@@ -69,7 +91,7 @@ App Store 앱은 샌드박스 안에서만 돌아야 하는데, Cheoma의 핵심
    SIGN_IDENTITY="Developer ID Application: 이름 (TEAMID)" NOTARY_PROFILE=cheoma scripts/build-app.sh
    ```
 
-무료 Apple ID로 받는 "Apple Development" 인증서는 내 맥에서 개발할 때만 쓸 수 있고, 다른 사람에게 배포하는 용도로는 쓸 수 없다.
+무료 Apple ID로 받는 "Apple Development" 인증서는 내 맥에서 개발할 때만 쓸 수 있고, 다른 사람에게 배포하는 용도로는 쓸 수 없다. 그래서 개발 빌드에만 쓰고, 릴리스는 ad-hoc으로 서명한다.
 
 ## 맥 종류별로 되는 것
 
@@ -86,7 +108,7 @@ App Store 앱은 샌드박스 안에서만 돌아야 하는데, Cheoma의 핵심
 
 무료 배포에 필요한 것:
 
-- 스크린샷 (`--render`로 만든다)
+- ~~스크린샷~~ (2026-10-30 완료, `docs/images/`. `--render`로 만들고 아래 빈 곳을 잘랐다)
 - ~~앱 아이콘~~ (2026-10-30 완료, `design/icon/`)
 - 처음 실행 안내: 손쉬운 사용 권한이 왜 필요한지 설명하는 화면
 - 권한이 풀렸을 때 안내: 업데이트 뒤 시스템 설정에는 켜져 있는데 동작하지 않는 경우를 알아채고 다시 허용하는 방법을 보여준다

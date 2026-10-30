@@ -6,7 +6,8 @@
 #   JOBS            빌드 동시 작업 수 (기본 2: 팬이 덜 돈다)
 #   SIGN_IDENTITY   서명 인증서 이름. 예: "Developer ID Application: 이름 (TEAMID)".
 #                   없으면 키체인의 Developer ID → Apple Development 인증서 순으로 고르고, 둘 다 없으면 ad-hoc 서명.
-#                   ad-hoc 서명은 빌드할 때마다 서명이 바뀌어서 손쉬운 사용 권한을 매번 다시 줘야 한다
+#                   ad-hoc 서명은 빌드할 때마다 서명이 바뀌어서 손쉬운 사용 권한을 매번 다시 줘야 한다.
+#                   Apple Development 인증서는 배포용이 아니므로, Developer ID 없이 내는 릴리스는 SIGN_IDENTITY=- 로 만든다
 #   NOTARY_PROFILE  공증에 쓸 notarytool 키체인 프로필 이름 (xcrun notarytool store-credentials로 만든다).
 #                   있으면 Apple 공증을 받고 배포용 dist/Cheoma.zip을 만든다
 set -e
