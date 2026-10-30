@@ -66,11 +66,34 @@ enum PreviewRenderer {
 
         // 광화문 테마
         model.theme = .gwanghwamun
-        for tab in [DashboardTab.overview, .graphs, .fans] {
+        for tab in DashboardTab.allCases {
             model.previewOpen(tab)
             render(NotchView(model: model, stats: stats, fans: fans), to: folder.appendingPathComponent("gwanghwamun-\(tab).png"))
         }
         model.theme = .basic
+
+        checkOverflow(model: model, stats: stats, fans: fans)
+    }
+
+    /// 탭마다 내용이 펼친 크기 안에 들어가는지 잰다. 넘치면 아래쪽이 모양에 잘려 안 보인다
+    private static func checkOverflow(model: NotchModel, stats: StatsStore, fans: FanController) {
+        let savedTheme = model.theme
+        defer { model.theme = savedTheme }
+        for theme in NotchTheme.allCases {
+            model.theme = theme
+            for tab in DashboardTab.allCases {
+                model.tab = tab
+                let size = model.dashboardSize
+                let topInset = theme == .basic ? model.notchSize.height : Gwanghwamun.dashboardTopInset
+                let view = DashboardView(topInset: topInset, stats: stats, fans: fans, tab: .constant(tab), theme: .constant(theme))
+                    .frame(width: size.width)
+                    .environment(\.colorScheme, .dark)
+                // 높이를 0으로 제안하면 그래프처럼 늘었다 줄었다 하는 부분은 최소 크기로 줄고, 글자는 제 크기를 지킨다
+                let needed = NSHostingController(rootView: view).sizeThatFits(in: CGSize(width: size.width, height: 0)).height
+                let verdict = needed > size.height + 0.5 ? "넘침" : "맞음"
+                print("\(verdict) \(theme) \(tab): 내용 \(Int(needed.rounded(.up))) / 자리 \(Int(size.height))")
+            }
+        }
     }
 
     private static func render<V: View>(_ view: V, to url: URL) {

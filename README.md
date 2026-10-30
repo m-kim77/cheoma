@@ -60,7 +60,7 @@ Developer options:
 |---|---|
 | `--stats` | Print sensor readings for 3 seconds without UI |
 | `--menubar-items` | List menu bar icons and whether they are hidden |
-| `--render <folder>` | Save the notch UI as PNGs (debug builds) |
+| `--render <folder>` | Save the notch UI as PNGs and check that every tab fits its open size (debug builds) |
 | `--bench [seconds] [tab]` | Measure sensor read times and CPU usage per state |
 | `--notify "text" [--symbol name] [--color green]` | Show an alert in the running app |
 

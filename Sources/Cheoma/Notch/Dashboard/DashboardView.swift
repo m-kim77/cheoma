@@ -8,15 +8,16 @@ enum DashboardTab: String, CaseIterable {
     case fans = "팬"
     case apps = "앱"
 
-    /// 탭마다 노치가 펼쳐지는 크기 (탭을 바꾸면 스프링으로 늘었다 줄었다 한다)
+    /// 탭마다 노치가 펼쳐지는 크기 (탭을 바꾸면 스프링으로 늘었다 줄었다 한다).
+    /// 내용이 다 들어가는지는 `--render`가 탭마다 재서 알려준다
     var openSize: CGSize {
         switch self {
-        case .graphs: CGSize(width: 720, height: 352)
+        case .graphs: CGSize(width: 720, height: 372)
         case .overview: CGSize(width: 660, height: 254)
-        case .power: CGSize(width: 660, height: 280)
+        case .power: CGSize(width: 660, height: 292)
         case .thermal: CGSize(width: 660, height: 300)
         case .fans: CGSize(width: 700, height: 340)
-        case .apps: CGSize(width: 660, height: 310)
+        case .apps: CGSize(width: 660, height: 318)
         }
     }
 }
@@ -49,25 +50,35 @@ struct DashboardView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center) {
+        HStack(alignment: .center, spacing: 0) {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    // 시계는 한 줄로 둔다. 좁은 탭에서 "오전"과 시각이 두 줄로 갈라지면 그만큼 아래 내용이 밀려 잘린다
                     Text(context.date, format: .dateTime.hour().minute())
                         .font(.system(size: 26, weight: .semibold, design: .rounded))
                         .monospacedDigit()
-                    Text(context.date, format: .dateTime.month().day().weekday(.abbreviated))
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .fixedSize()
+                    // 자리가 모자라면 날짜를 줄이고, 그래도 모자라면 뺀다
+                    ViewThatFits(in: .horizontal) {
+                        Text(context.date, format: .dateTime.month().day().weekday(.abbreviated))
+                        Text(context.date, format: .dateTime.day().weekday(.abbreviated))
+                        Color.clear.frame(width: 0, height: 0)
+                    }
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 }
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: 10)
             // 탭 이름은 줄바꿈되지 않게 (자리가 모자라면 날짜가 줄어든다)
             tabPicker
                 .fixedSize()
-            Spacer(minLength: 8)
+            Spacer(minLength: 10)
             if let power = stats.snapshot.power {
                 BatteryBadge(power: power)
+                    .fixedSize()
+                    .padding(.trailing, 8)
             }
             themeButton
         }
