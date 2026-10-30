@@ -1,0 +1,40 @@
+
+[48;2;33;59;73m
+ [38;2;222;224;225mRun the shell command: touch a.txt[39m
+
+
+[48;2;37;65;49m
+ [1m[38;2;222;224;225m$ touch a.txt[0m[48;2;37;65;49m
+
+ [38;2;157;165;169m(no output)[39m
+
+ [38;2;157;165;169mTook 0.0s[39m
+
+
+[49m Done.
+
+[38;2;95;168;204m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+[38;2;205;154;34mOnly showing models from configured providers. Use /login to add providers.[39m
+
+> [7m [0m
+
+[38;2;167;152;215m→ ✓ gpt-5.6-terra[39m [38;2;157;165;169m[openai-codex][39m
+    gpt-5.5 [38;2;157;165;169m[openai-codex] · default[39m
+    gpt-5.3-codex-spark [38;2;157;165;169m[openai-codex][39m
+    gpt-5.6-luna [38;2;157;165;169m[openai-codex][39m
+    gpt-5.6-sol [38;2;157;165;169m[openai-codex]
+[39m    gpt-6-astra [38;2;157;165;169m[openai-codex]
+[39m    gpt-6-luna [38;2;157;165;169m[openai-codex][39m
+    gpt-6-sol [38;2;157;165;169m[openai-codex][39m
+    gpt-6.1-sol [38;2;157;165;169m[openai-codex]
+[39m    gpt-6.1-terra [38;2;157;165;169m[openai-codex][39m
+
+[38;2;157;165;169m  Model Name: GPT-5.6 Terra[39m
+
+[38;2;104;183;141m  Model catalogs refreshed.[39m
+
+[38;2;126;136;142m  Enter to select · Ctrl+S to set as default · Escape/Ctrl+C to cancel[39m
+[38;2;95;168;204m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[38;2;126;136;142m/private/tmp/claude-501/-Users-user0-Documents-project-M-mac-project-menu-bar/da228b62-56cb-4205-a0fc-98ce87024d68/sc...
+↑2.5k ↓40 $0.005 (sub) 0.5%/272k (auto)                                                           gpt-5.6-terra • medium

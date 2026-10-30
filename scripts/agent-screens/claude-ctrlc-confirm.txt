@@ -1,0 +1,40 @@
+
+[38;5;174m ▐[48;5;16m▛███▛█[39m[49m   [1mClaude Code[0m [38;5;246mv2.1.314[39m
+[38;5;174m▝▜[48;5;16m█████[49m█▀[39m  [38;5;246mOpus 5.5 with high effort · Claude Max[39m
+[38;5;174m ▝▝   ▝▝ [39m  [38;5;246m/…/da228b62-56cb-4205-a0fc-98ce87024d68/scratchpad/w/claude[39m
+
+
+[38;5;246m[48;5;237m❯ [38;5;231mCreate hello.txt containing "hi". Nothing else.[39m
+
+[38;5;114m[49m⏺[39m [1mWrite[0m(]8;id=1687gjp;file:///private/tmp/claude-501/-Users-user0-Documents-project-M-mac-project-menu-bar/da228b62-56cb-4205-a0fc-98ce87024d68/scratchpad/w/claude/hello.txt\hello.txt]8;;\)
+[38;5;246m  ⎿  [39mWrote [1m1[0m line to [1m]8;id=1687gjp;file:///private/tmp/claude-501/-Users-user0-Documents-project-M-mac-project-menu-bar/da228b62-56cb-4205-a0fc-98ce87024d68/scratchpad/w/claude/hello.txt\hello.txt]8;;\
+[0m     [2m[38;5;231m 1 [0m[38;5;231mhi[39m
+
+[38;5;231m⏺[39m I created [38;5;153mhello.txt[39m in the working directory. It contains only [38;5;153mhi[39m, with no trailing newline.
+
+[38;5;246m✻[39m [38;5;246mBaked for 3s · done 오후 10:55[39m
+
+[38;5;246m[48;5;237m❯ [38;5;231mRun the shell command: touch a.txt[39m
+[49m
+  [38;5;246mRan [1m1[0m[38;5;246m shell command [39m
+
+[38;5;231m⏺[39m I ran [38;5;153mtouch a.txt[39m. It finished without errors, so [38;5;153ma.txt[39m now exists in the working directory.
+
+[38;5;246m✻[39m [38;5;246mSautéed for 2s · done 오후 10:56[39m
+
+[38;5;246m[48;5;237m❯ [38;5;231mUse the AskUserQuestion tool to ask me: tea or coffee? Do nothing else.[39m
+
+[38;5;246m[49m⏺ [39mUser answered Claude's questions:
+[38;5;246m  ⎿  · Tea or coffee? → Coffee
+
+[38;5;231m⏺[39m You picked coffee.
+
+[38;5;246m✻[39m [38;5;246mBaked for 2s · done 오후 10:57[39m
+
+
+
+                                                                                                      [38;5;246m● high · /effort[39m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[39m❯ 
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[39m  [38;5;246mPress Ctrl-C again to exit[39m
