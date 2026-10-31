@@ -139,7 +139,8 @@ final class NotchModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.alertDuration, execute: work)
     }
 
-    private func alertFinished() {
+    /// 알림 시간이 끝났을 때 (테스트에서는 바로 부른다)
+    func alertFinished() {
         // 기다리던 것 중 경고를 먼저
         guard let index = pendingAlerts.firstIndex(where: \.isWarning) ?? pendingAlerts.indices.first else {
             alert = nil

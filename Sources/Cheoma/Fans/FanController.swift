@@ -650,12 +650,9 @@ final class FanController: ObservableObject {
 
     /// 메인 스레드를 막지 않도록 osascript를 별도 프로세스로 실행한다
     private func runAsAdministrator(_ shell: String, prompt: String, completion: @escaping @MainActor (String?) -> Void) {
-        let escape: (String) -> String = {
-            $0.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", "do shell script \"\(escape(shell))\" with prompt \"\(escape(prompt))\" with administrator privileges"]
+        process.arguments = ["-e", Self.shellScript(shell, administratorPrompt: prompt)]
         let errorPipe = Pipe()
         process.standardError = errorPipe
         do {
@@ -671,6 +668,16 @@ final class FanController: ObservableObject {
             let status = process.terminationStatus
             Task { @MainActor in completion(status == 0 ? nil : output) }
         }
+    }
+
+    /// osascript에 넘길 AppleScript. prompt가 있으면 관리자 암호를 묻고 root로 실행한다 (테스트는 prompt 없이 그대로 돌려 본다)
+    static func shellScript(_ shell: String, administratorPrompt prompt: String?) -> String {
+        let escape: (String) -> String = {
+            $0.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        }
+        let script = "do shell script \"\(escape(shell))\""
+        guard let prompt else { return script }
+        return script + " with prompt \"\(escape(prompt))\" with administrator privileges"
     }
 
     private static func describe(_ error: String) -> String {
