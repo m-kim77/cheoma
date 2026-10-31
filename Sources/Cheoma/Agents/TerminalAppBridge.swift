@@ -55,8 +55,7 @@ final class TerminalAppBridge: TerminalBridge, Sendable {
 
     /// 모든 창의 탭 목록
     func tabs() throws -> [TerminalAppTab] {
-        try requireRunning()
-        return TerminalAppScript.parseTabs(try run(TerminalAppScript.tabs()))
+        TerminalAppScript.parseTabs(try runIfRunning(TerminalAppScript.tabs()))
     }
 
     /// 새 창을 열고 폴더에서 명령을 실행한다 (Terminal의 AppleScript에는 새 탭 명령이 없다). 새 에이전트 실행, tmux 세션 열기에 쓴다.
@@ -68,8 +67,7 @@ final class TerminalAppBridge: TerminalBridge, Sendable {
 
     func capture(_ location: TerminalLocation) throws -> TerminalScreen {
         let tty = try Self.tty(of: location)
-        try requireRunning()
-        let output = try run(TerminalAppScript.capture(tty: tty))
+        let output = try runIfRunning(TerminalAppScript.capture(tty: tty))
         return TerminalScreen(text: TerminalAppScript.screenText(output), capturedAt: Date())
     }
 
@@ -77,8 +75,7 @@ final class TerminalAppBridge: TerminalBridge, Sendable {
     /// 여러 줄은 한 줄로 합친다 (줄바꿈이 중간에 Enter로 들어가지 않게)
     func send(text: String, pressEnter: Bool, to location: TerminalLocation) throws {
         let tty = try Self.tty(of: location)
-        try requireRunning()
-        _ = try run(TerminalAppScript.send(text: text, tty: tty))
+        _ = try runIfRunning(TerminalAppScript.send(text: text, tty: tty))
     }
 
     func send(key: TerminalKey, to location: TerminalLocation) throws {
@@ -88,14 +85,36 @@ final class TerminalAppBridge: TerminalBridge, Sendable {
     /// 그 탭을 고르고 창을 맨 앞으로 가져온 뒤 Terminal을 앞으로 띄운다
     func reveal(_ location: TerminalLocation) throws {
         let tty = try Self.tty(of: location)
-        try requireRunning()
-        _ = try run(TerminalAppScript.reveal(tty: tty))
+        _ = try runIfRunning(TerminalAppScript.reveal(tty: tty))
     }
 
     // MARK: - 실행
 
-    private func requireRunning() throws {
+    /// Terminal이 켜져 있을 때만 스크립트를 돌린다. 켜져 있는지는 Cheoma의 앱 목록과 스크립트 첫 줄에서 두 번 보는데,
+    /// 켜져 있는데도 둘 중 하나가 꺼져 있다고 답할 때가 있어서(앱 목록이 늦게 바뀌거나 Apple Event가 엇갈릴 때) 한 번 더 해 본다
+    private func runIfRunning(_ script: String) throws -> String {
+        do {
+            return try runOnceIfRunning(script)
+        } catch let error as AgentBridgeError where error.message == TerminalAppScript.Message.notRunning {
+            let wasListed = isRunning
+            Thread.sleep(forTimeInterval: Self.notRunningRetryDelay)
+            do {
+                let output = try runOnceIfRunning(script)
+                AppLog.write("Terminal이 꺼져 있다고 나왔다가 다시 해 보니 됨 (앱 목록: \(wasListed ? "켜짐" : "꺼짐"))")
+                return output
+            } catch let retry as AgentBridgeError where retry.message == TerminalAppScript.Message.notRunning {
+                // 실제로 꺼진 것이면 둘 다 꺼짐이다. 앱 목록은 켜짐인데 꺼져 있다고 나오면 남겨 둔다
+                if isRunning { AppLog.write("Terminal이 켜져 있는데 스크립트는 꺼져 있다고 답함") }
+                throw retry
+            }
+        }
+    }
+
+    private static let notRunningRetryDelay: TimeInterval = 0.4
+
+    private func runOnceIfRunning(_ script: String) throws -> String {
         guard isRunning else { throw AgentBridgeError(message: TerminalAppScript.Message.notRunning) }
+        return try run(script)
     }
 
     private static func tty(of location: TerminalLocation) throws -> String {
