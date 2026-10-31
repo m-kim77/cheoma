@@ -17,6 +17,9 @@ struct MenuBarItem: Identifiable, @unchecked Sendable {
     func press() {
         AXUIElementPerformAction(element, kAXPressAction as CFString)
     }
+
+    /// 지금 위치. frame은 목록을 읽은 순간의 값이라 그 뒤 구분선이 접히거나 펼쳐지면 달라진다
+    var currentFrame: CGRect? { MenuBarItemScanner.frame(of: element) }
 }
 
 /// macOS 26부터 메뉴바 아이콘 창은 전부 "제어 센터" 소유라 창 목록으로는 어느 앱 것인지 알 수 없다.
@@ -25,7 +28,8 @@ enum MenuBarItemScanner {
     static var hasPermission: Bool { AXIsProcessTrusted() }
 
     static func requestPermission() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        // kAXTrustedCheckOptionPrompt는 전역 var라 Swift 6에서 경고가 나서 같은 값의 문자열을 쓴다
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
@@ -108,7 +112,7 @@ enum MenuBarItemScanner {
         return items.sorted { $0.frame.minX < $1.frame.minX }
     }
 
-    private static func frame(of element: AXUIElement) -> CGRect? {
+    fileprivate static func frame(of element: AXUIElement) -> CGRect? {
         guard let positionValue: AXValue = attribute(element, kAXPositionAttribute),
               let sizeValue: AXValue = attribute(element, kAXSizeAttribute) else { return nil }
         var position = CGPoint.zero

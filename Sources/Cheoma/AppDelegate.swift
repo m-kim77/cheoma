@@ -52,8 +52,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         systemEvents.onThermalStateChange = { [weak self] state in self?.warnings.thermalStateChanged(to: state) }
         systemEvents.onMemoryPressure = { [weak self] event in self?.warnings.memoryPressureChanged(to: event) }
         systemEvents.onBatteryChange = { [weak self] new, old in
-            // 최초 1회 읽기에는 알림을 띄우지 않음
-            guard let self, let old else { return }
+            guard let self else { return }
+            stats.powerSourceChanged()
+            // 최초 1회 읽기에는 충전기 알림을 띄우지 않는다 (배터리 부족만 확인)
+            guard let old else {
+                warnings.batteryAtLaunch(new)
+                return
+            }
             guard old.isPluggedIn != new.isPluggedIn else {
                 warnings.batteryChanged(new, from: old)
                 return
@@ -73,8 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notifyObserver = DistributedNotificationCenter.default().addObserver(
             forName: NotifyCommand.notificationName, object: nil, queue: .main
         ) { [weak self] notification in
+            // Notification은 Sendable이 아니라 메인으로 넘기기 전에 문자열만 꺼낸다
+            let info = NotifyCommand.Info(notification)
             MainActor.assumeIsolated {
-                if let alert = NotifyCommand.alert(from: notification) { self?.notchModel.show(alert) }
+                if let alert = info?.alert { self?.notchModel.show(alert) }
             }
         }
 

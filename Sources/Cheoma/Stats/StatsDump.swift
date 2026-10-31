@@ -4,7 +4,7 @@ import Foundation
 @MainActor
 enum StatsDump {
     static func run() {
-        let store = StatsStore()
+        let store = StatsStore(savesHistory: false)
         store.start()
         // 대시보드가 열린 것처럼 매초 재야 3초 안에 구성요소별 전력(2초 간격)까지 나온다
         store.isDashboardOpen = true

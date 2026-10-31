@@ -14,20 +14,17 @@ struct StatsSnapshot: Equatable {
     var apps: [AppUsage]?
 }
 
-/// 1초마다 모든 센서를 읽는다. 읽기 자체는 1ms 안팎이라 상시 돌려도 부담이 거의 없다.
+/// 1초(닫혀 있으면 2초)마다 센서를 읽는다. 읽기는 Sensors가 백그라운드 queue에서 하고, 결과만 메인 스레드에 반영한다:
+/// IOReport 약 4ms, 온도 35개 약 5ms, 앱 목록 약 1.5ms라 메인에서 읽으면 120Hz 한 프레임(8.3ms)을 넘길 수 있다.
 @MainActor
 final class StatsStore: ObservableObject {
     @Published private(set) var snapshot = StatsSnapshot()
     @Published private(set) var history = StatsHistory()
 
-    private let cpu = CPUSampler()
-    private let memory = MemorySampler()
-    private let gpu = GPUSampler()
-    private let network = NetworkSampler()
-    private let disk = DiskSampler()
-    private let power = PowerSampler()
-    private let thermal = ThermalSampler()
-    private let appUsage = AppUsageSampler()
+    private let sensors = Sensors()
+    private let queue = DispatchQueue(label: "io.github.m-kim77.cheoma.stats", qos: .utility)
+    /// 앞의 측정이 아직 안 끝났으면 다음 측정은 건너뛴다
+    private var isReading = false
     private var timer: Timer?
     private var saveTimer: Timer?
     private var tickCount = 0
@@ -35,20 +32,25 @@ final class StatsStore: ObservableObject {
     var isDashboardOpen = false {
         didSet { if isDashboardOpen && !oldValue { tick() } }
     }
-    /// 온도는 천천히 변하고 센서 35개를 읽는 데 4~6ms가 걸려서, 열려 있으면 2초·닫혀 있으면 4초마다만 읽는다
-    private var lastThermal: ThermalStats?
     /// 온도·팬 탭을 보고 있으면 팬이 목표 속도로 따라가는 게 바로 보이도록 팬 RPM만 매초 따로 읽는다 (키 몇 개라 싸다)
     var showsFans = false
     /// 앱별 사용량은 앱 탭을 보고 있을 때만 잰다
     var showsApps = false {
         didSet {
             guard showsApps != oldValue else { return }
-            lastApps = nil
-            // 기준값을 미리 잡아두면 다음 측정부터 바로 값이 나온다
-            if showsApps { _ = appUsage.sample() }
+            let shows = showsApps
+            queue.async { [sensors] in sensors.setShowsApps(shows) }
         }
     }
-    private var lastApps: [AppUsage]?
+    /// 화면 주사율. 화면 구성이 바뀔 때만 다시 읽는다
+    private var refreshRate: Int??
+    private var screenObserver: NSObjectProtocol?
+    /// `--bench`처럼 잠깐 띄우는 경우 본 앱의 기록 파일을 덮어쓰지 않게 끈다
+    private let savesHistory: Bool
+
+    init(savesHistory: Bool = true) {
+        self.savesHistory = savesHistory
+    }
 
     private static let historyURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/Cheoma/history.plist")
@@ -56,6 +58,11 @@ final class StatsStore: ObservableObject {
     func start() {
         guard timer == nil else { return }
         loadHistory()
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshRate = nil }
+        }
         tick()
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.timerFired() }
@@ -66,6 +73,7 @@ final class StatsStore: ObservableObject {
         self.timer = timer
 
         // 갑자기 꺼져도 최대 5분치만 잃도록 주기적으로 저장
+        guard savesHistory else { return }
         let saveTimer = Timer(timeInterval: 300, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.saveHistory() }
         }
@@ -76,6 +84,7 @@ final class StatsStore: ObservableObject {
 
     /// 앱을 끌 때는 synchronously로 저장을 마치고 끝낸다
     func saveHistory(synchronously: Bool = false) {
+        guard savesHistory else { return }
         let history = self.history
         let url = Self.historyURL
         let write: @Sendable () -> Void = {
@@ -92,7 +101,13 @@ final class StatsStore: ObservableObject {
         guard let data = try? Data(contentsOf: Self.historyURL),
               var saved = try? PropertyListDecoder().decode(StatsHistory.self, from: data) else { return }
         saved.prune(now: Date().timeIntervalSinceReferenceDate)
+        saved.discardImpossibleValues()
         history = saved
+    }
+
+    /// 충전기를 꽂거나 빼면 배터리 정보를 바로 다시 읽는다 (안 그러면 최대 10초 늦게 보인다)
+    func powerSourceChanged() {
+        queue.async { [sensors] in sensors.powerSourceChanged() }
     }
 
     private func timerFired() {
@@ -102,33 +117,32 @@ final class StatsStore: ObservableObject {
     }
 
     private func tick() {
-        let cpuSample = cpu.sample()
-        var s = StatsSnapshot()
-        s.cpu = cpuSample?.total
-        s.cores = cpuSample?.cores ?? []
-        s.gpu = gpu.sample()
-        s.memory = memory.sample()
-        s.network = network.sample()
-        s.disk = disk.sample()
-        // 비싼 센서(온도 35개, 구성요소별 전력)는 열려 있으면 2초, 닫혀 있으면 4초마다만 읽는다
-        let slowTick = lastThermal == nil || tickCount % (isDashboardOpen ? 2 : 4) == 0
-        s.power = power.sample(readEnergy: slowTick)
-        if slowTick {
-            lastThermal = thermal.sample()
-        } else if showsFans, var current = lastThermal {
-            current.fans = thermal.sampleFans()
-            lastThermal = current
+        guard !isReading else { return }
+        isReading = true
+        // 비싼 센서(온도 35개, 구성요소별 전력)는 열려 있으면 2초, 닫혀 있으면 4초마다만 읽는다.
+        // 앱 순위는 너무 자주 뒤바뀌지 않도록 2초마다 잰다
+        let request = Sensors.Request(slow: tickCount % (isDashboardOpen ? 2 : 4) == 0,
+                                      fans: showsFans,
+                                      apps: showsApps ? tickCount % 2 == 0 : nil)
+        queue.async { [sensors] in
+            let snapshot = sensors.read(request)
+            let time = Date().timeIntervalSinceReferenceDate
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated { self?.finish(snapshot, at: time) }
+            }
         }
-        s.thermal = lastThermal
-        // 순위가 너무 자주 뒤바뀌지 않도록 2초마다 잰다
-        if showsApps {
-            if lastApps == nil || tickCount % 2 == 0 { lastApps = appUsage.sample() ?? lastApps }
-            s.apps = lastApps
+    }
+
+    private func finish(_ reading: StatsSnapshot, at time: TimeInterval) {
+        isReading = false
+        var s = reading
+        if refreshRate == nil {
+            refreshRate = .some(NSScreen.screens.first { $0.safeAreaInsets.top > 0 }?.maximumFramesPerSecond
+                ?? NSScreen.screens.first?.maximumFramesPerSecond)
         }
-        s.refreshRate = NSScreen.screens.first { $0.safeAreaInsets.top > 0 }?.maximumFramesPerSecond
-            ?? NSScreen.main?.maximumFramesPerSecond
+        s.refreshRate = refreshRate ?? nil
         snapshot = s
-        history.append(s, at: Date().timeIntervalSinceReferenceDate)
+        history.append(s, at: time)
     }
 
     #if DEBUG
@@ -153,4 +167,63 @@ final class StatsStore: ObservableObject {
         self.history = history
     }
     #endif
+}
+
+/// 센서 묶음. StatsStore의 queue에서만 쓴다 (그래서 @unchecked Sendable). 지난 값(온도, 앱 목록)도 여기서 기억한다
+private final class Sensors: @unchecked Sendable {
+    struct Request {
+        /// 온도 전체와 구성요소별 전력도 읽는다
+        var slow: Bool
+        /// 온도를 안 읽는 차례에도 팬 RPM만 따로 읽는다
+        var fans: Bool
+        /// 앱 탭을 보고 있으면 이번에 앱 목록을 새로 잴 차례인지, 안 보고 있으면 nil
+        var apps: Bool?
+    }
+
+    private let cpu = CPUSampler()
+    private let memory = MemorySampler()
+    private let gpu = GPUSampler()
+    private let network = NetworkSampler()
+    private let disk = DiskSampler()
+    private let power = PowerSampler()
+    private let thermal = ThermalSampler()
+    /// 앱 탭을 닫으면 새로 만들어서 프로세스 기록과 실행 인자 버퍼(1MB)를 놓는다
+    private var appUsage = AppUsageSampler()
+    private var lastThermal: ThermalStats?
+    private var lastApps: [AppUsage]?
+
+    func read(_ request: Request) -> StatsSnapshot {
+        let cpuSample = cpu.sample()
+        var s = StatsSnapshot()
+        s.cpu = cpuSample?.total
+        s.cores = cpuSample?.cores ?? []
+        s.gpu = gpu.sample()
+        s.memory = memory.sample()
+        s.network = network.sample()
+        s.disk = disk.sample()
+        let slow = request.slow || lastThermal == nil
+        s.power = power.sample(readEnergy: slow)
+        if slow {
+            lastThermal = thermal.sample()
+        } else if request.fans, var current = lastThermal {
+            current.fans = thermal.sampleFans()
+            lastThermal = current
+        }
+        s.thermal = lastThermal
+        if let due = request.apps {
+            if lastApps == nil || due { lastApps = appUsage.sample() ?? lastApps }
+            s.apps = lastApps
+        }
+        return s
+    }
+
+    func setShowsApps(_ shows: Bool) {
+        lastApps = nil
+        // 기준값을 미리 잡아두면 다음 측정부터 바로 값이 나온다
+        if shows { _ = appUsage.sample() } else { appUsage = AppUsageSampler() }
+    }
+
+    func powerSourceChanged() {
+        power.powerSourceChanged()
+    }
 }

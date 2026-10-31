@@ -16,6 +16,13 @@ struct MemoryStats: Equatable {
 final class MemorySampler {
     private let host = mach_host_self()
     private let total = Sysctl.read("hw.memsize", initial: UInt64(0)) ?? 0
+    /// host_statistics64가 세는 커널 페이지 크기
+    private let pageSize: UInt64
+
+    init() {
+        var size: vm_size_t = 0
+        pageSize = host_page_size(mach_host_self(), &size) == KERN_SUCCESS && size > 0 ? UInt64(size) : 16_384
+    }
 
     func sample() -> MemoryStats? {
         var vm = vm_statistics64()
@@ -27,8 +34,9 @@ final class MemorySampler {
         }
         guard result == KERN_SUCCESS else { return nil }
 
-        let page = UInt64(vm_kernel_page_size)
-        let app = UInt64(vm.internal_page_count - vm.purgeable_count) * page
+        let page = pageSize
+        // 32비트 값끼리 빼면 정리 가능한 페이지가 더 많을 때 넘쳐서 앱이 죽는다
+        let app = (UInt64(vm.internal_page_count) - min(UInt64(vm.purgeable_count), UInt64(vm.internal_page_count))) * page
         let wired = UInt64(vm.wire_count) * page
         let compressed = UInt64(vm.compressor_page_count) * page
         let swap = Sysctl.read("vm.swapusage", initial: xsw_usage())?.xsu_used ?? 0

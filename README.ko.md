@@ -101,10 +101,12 @@ Cheoma는 맥의 노치에서 같은 일을 한다.
 
 안전장치:
 
-- 수동 설정은 앱이 켜져 있는 동안만 유지된다. 앱을 끄거나, 앱이 비정상 종료되거나, 20초 동안 응답이 없으면 자동으로 돌아간다.
-- CPU가 95°C를 넘으면 (팬을 멈춘 동안은 85°C) 자동으로 돌아간다.
+- 수동 설정은 앱이 켜져 있는 동안만 유지된다. 앱을 끄거나, 앱이 비정상 종료되거나, 20초 동안 응답이 없으면 자동으로 돌아간다. 잠자는 시간은 세지 않는다.
+- CPU가 95°C를 넘으면 (팬을 멈춘 동안은 85°C) 자동으로 돌아간다. 앱에도 자동으로 표시되고 이유를 알려 준다.
+- 자동으로 되돌리기에 실패하면 도우미가 2초마다 다시 시도한다.
 - 팬이 8초 안에 설정한 속도를 따라오지 않으면 자동으로 되돌리고 알려 준다.
 - 도우미는 각 팬의 최소~최대 범위 안에서 속도를 정하거나 자동으로 되돌리는 일만 할 수 있다.
+- 도우미는 설치할 때의 Cheoma와 코드 서명이 같은 앱하고만 통신한다.
 
 ### 우클릭 메뉴
 
@@ -155,7 +157,7 @@ Cheoma는 아직 스스로 업데이트하지 않는다. 새 버전 소식을 �
 1. Cheoma를 끈다: `⌄` 우클릭 › **종료**.
 2. 새 [`Cheoma.zip`](https://github.com/m-kim77/cheoma/releases/latest/download/Cheoma.zip)을 받아 응용 프로그램 폴더의 `Cheoma.app`을 바꾼다. macOS가 **그래도 열기**를 다시 물을 수 있다.
 3. 가려진 아이콘이 안 눌리면 손쉬운 사용 권한이 예전 버전에 묶여 있는 것이다. 시스템 설정 › 개인정보 보호 및 보안 › 손쉬운 사용에서 Cheoma를 골라 `−`로 지우고 다시 허용한다. 터미널에서는 `tccutil reset Accessibility io.github.m-kim77.cheoma`로 지운다.
-4. 팬 탭에 **다시 설치**가 보이면 누른다.
+4. 팬 조절을 쓴다면 업데이트한 뒤 팬 탭에 **다시 설치**가 뜬다. 도우미는 설치할 때의 그 빌드하고만 통신하기 때문이다. 누르고 암호를 넣는다.
 
 설정과 그래프 기록은 그대로 남는다.
 
@@ -212,6 +214,7 @@ open ~/Applications/Cheoma.app
 - 팬이 덜 돌도록 기본으로 동시 작업 2개(`JOBS=2`)만 쓴다.
 - 배포판과 같은 조건이 되도록 hardened runtime으로 서명한다. `SIGN_IDENTITY`(Developer ID 인증서)와 `NOTARY_PROFILE`(공증 프로필)을 주면 배포용으로 서명·공증한다 ([배포 계획](docs/DISTRIBUTION.md)).
 - 개발 중에는 `swift build && .build/debug/Cheoma`로 바로 실행해도 된다. 이때는 로그인 시 자동 실행을 쓸 수 없다.
+- 단위 테스트는 `scripts/test.sh`. XCTest는 Xcode에 들어 있어서, 명령줄 도구만 선택돼 있으면 Xcode의 툴체인으로 돌린다.
 
 개발용 옵션:
 
@@ -220,7 +223,7 @@ open ~/Applications/Cheoma.app
 | `--stats` | UI 없이 3초간 센서 값 출력 |
 | `--menubar-items` | 메뉴바 아이콘 목록과 가려짐 여부 출력 |
 | `--render <폴더>` | 노치 UI를 PNG로 저장하고, 탭마다 내용이 펼친 크기 안에 들어가는지 재서 알려준다 (디버그 빌드, 화면 기록 권한 불필요) |
-| `--bench [초] [탭]` | 센서 한 번 읽는 시간과 상황·탭별 CPU 사용률 측정 (대시보드는 1% 불투명도로 띄움, 팬은 안 건드림) |
+| `--bench [초] [탭]` | 센서 한 번 읽는 시간과 상황·탭별 CPU 사용률·그래프 그리기·창 배치 횟수 측정 (대시보드는 1% 불투명도로 띄움, 팬과 기록 파일은 안 건드림) |
 | `--notify "내용" [--symbol 이름] [--color green]` | 실행 중인 앱에 알림 띄우기 |
 
 데이터 위치:
@@ -228,7 +231,7 @@ open ~/Applications/Cheoma.app
 - 설정: `defaults read io.github.m-kim77.cheoma`
 - 그래프 기록: `~/Library/Application Support/Cheoma/history.plist`
 - 오류 로그: `~/Library/Logs/Cheoma.log`
-- 팬 도우미: `/Library/PrivilegedHelperTools/io.github.m-kim77.cheoma.fanhelper`, `/Library/LaunchDaemons/io.github.m-kim77.cheoma.fanhelper.plist`. 설치한 앱 실행 파일에서 온 연결만 받는다. 앱 위치가 바뀌거나 업데이트로 도우미가 바뀌면 팬 탭에 "다시 설치"가 뜬다.
+- 팬 도우미: `/Library/PrivilegedHelperTools/io.github.m-kim77.cheoma.fanhelper`, `/Library/LaunchDaemons/io.github.m-kim77.cheoma.fanhelper.plist`. 설치할 때의 앱과 코드 서명(지정 요구사항)이 같은 앱에서 온 연결만, 메시지마다 확인하고 받는다. ad-hoc 서명 릴리스는 업데이트할 때마다, 인증서로 서명한 빌드는 인증서가 바뀔 때 팬 탭에 "다시 설치"가 뜬다. 설치할 때는 관리자 셸이 도우미를 root 폴더로 복사한 뒤 서명을 확인하고 설치한다.
 
 구조:
 

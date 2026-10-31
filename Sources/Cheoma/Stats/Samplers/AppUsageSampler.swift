@@ -35,6 +35,9 @@ final class AppUsageSampler {
     private var previous: [pid_t: Counters] = [:]
     private var previousTime: UInt64 = 0
     private var groups: [pid_t: Group] = [:]
+    /// 프로세스가 exec로 다른 프로그램이 되면 pid와 시작 시각이 그대로라 이름이 안 바뀐다. 가끔 묶음을 새로 계산한다
+    private var samplesSinceRegroup = 0
+    private static let regroupInterval = 30
     private var bundleNames: [String: String] = [:]
     /// 실행 인자(KERN_PROCARGS2)를 읽을 버퍼. 처음 필요할 때 kern.argmax 크기로 만든다.
     private lazy var arguments = [UInt8](repeating: 0, count: Int(Sysctl.read("kern.argmax", initial: Int32(1 << 20)) ?? 1 << 20))
@@ -54,6 +57,11 @@ final class AppUsageSampler {
         let hasBaseline = previousTime > 0 && elapsed > 0 && elapsed < 10
         var current: [pid_t: Counters] = [:]
         var apps: [String: AppUsage] = [:]
+        samplesSinceRegroup += 1
+        if samplesSinceRegroup >= Self.regroupInterval {
+            samplesSinceRegroup = 0
+            groups.removeAll()
+        }
 
         for pid in Self.allPIDs() {
             guard let info = Self.usage(of: pid) else { continue }

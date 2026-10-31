@@ -98,10 +98,12 @@ Pick a mode in the **팬** (Fans) tab. Cheoma remembers it and applies it again 
 
 Safety:
 
-- Manual speeds only last while Cheoma runs. When it quits, crashes or stops responding for 20 seconds, the fans go back to automatic.
-- The fans also go back to automatic when the CPU passes 95 °C, or 85 °C while they are stopped.
+- Manual speeds only last while Cheoma runs. When it quits, crashes or stops responding for 20 seconds, the fans go back to automatic. Time asleep doesn't count.
+- The fans also go back to automatic when the CPU passes 95 °C, or 85 °C while they are stopped. Cheoma then shows Auto and tells you.
+- If handing the fans back to macOS fails, the helper keeps trying every 2 seconds.
 - If the fans don't reach the speed you set within 8 seconds, Cheoma switches back to automatic and tells you.
 - The helper can only set each fan between its own minimum and maximum speed, or hand control back to macOS.
+- The helper only talks to the Cheoma it was installed for, checked by code signature.
 
 ### Right-click menu
 
@@ -152,7 +154,7 @@ Cheoma doesn't update itself yet. To hear about new versions, click **Watch** �
 1. Quit Cheoma: right-click `⌄` › **종료** (Quit).
 2. Download the new [`Cheoma.zip`](https://github.com/m-kim77/cheoma/releases/latest/download/Cheoma.zip) and replace `Cheoma.app` in Applications. macOS may ask you to confirm **Open Anyway** again.
 3. If hidden icons stop responding, the Accessibility permission still belongs to the old version. In System Settings › Privacy & Security › Accessibility, select Cheoma, remove it with `−`, and allow it again. Or run `tccutil reset Accessibility io.github.m-kim77.cheoma`.
-4. If the Fans tab shows **다시 설치** (Reinstall), click it.
+4. If you use fan control, the Fans tab shows **다시 설치** (Reinstall) after the update, because the helper only talks to the exact build it was installed for. Click it and enter your password.
 
 Your settings and graph history are kept.
 
@@ -208,6 +210,7 @@ open ~/Applications/Cheoma.app
 - The script signs with the first Developer ID Application or Apple Development certificate in your keychain, so the Accessibility permission survives rebuilds. With neither, it signs ad-hoc and you have to allow Accessibility again after every build. Set `SIGN_IDENTITY` to pick a certificate, or `SIGN_IDENTITY=-` to force ad-hoc signing.
 - It builds with two jobs by default (`JOBS=2`) to keep the fans quiet.
 - For quick runs during development, `swift build && .build/debug/Cheoma` starts the app without a bundle. Launch at login isn't available that way.
+- `scripts/test.sh` runs the unit tests. XCTest comes with Xcode, so the script uses Xcode's toolchain when only the command line tools are selected.
 
 Developer options:
 
@@ -216,7 +219,7 @@ Developer options:
 | `--stats` | Print sensor readings for 3 seconds without UI |
 | `--menubar-items` | List menu bar icons and whether they are hidden |
 | `--render <folder>` | Save the notch UI as PNGs and check that every tab fits its open size (debug builds, no screen recording permission needed) |
-| `--bench [seconds] [tab]` | Measure sensor read times and CPU usage per state |
+| `--bench [seconds] [tab]` | Measure sensor read times, and CPU usage, graph draws and layout passes per state |
 | `--notify "text" [--symbol name] [--color green]` | Show an alert in the running app |
 
 Project layout:

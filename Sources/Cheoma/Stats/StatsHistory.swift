@@ -64,6 +64,13 @@ struct TimeSeries: Codable {
         Self.drop(&coarse, before: now - Self.coarseSpan)
     }
 
+    /// limit보다 큰 점을 버린다 (예전 버전이 남긴 말이 안 되는 값을 지울 때)
+    mutating func discard(above limit: Double) {
+        fine.removeAll { $0.peak > limit }
+        coarse.removeAll { $0.peak > limit }
+        if let bucket, bucket.peak > limit { self.bucket = nil }
+    }
+
     /// start 이후의 점들 (오래된 → 최신). 1시간보다 오래된 구간은 1분 평균으로 채운다.
     /// 그래프 왼쪽 끝에서 선이 끊기지 않도록 start 바로 앞의 점 하나를 포함한다.
     func points(since start: TimeInterval) -> [Point] {
@@ -73,10 +80,33 @@ struct TimeSeries: Codable {
         return Array(older) + fine
     }
 
+    /// start 이후의 평균과 최대. 최대는 1분 평균이 아니라 그 1분 안의 최대값(peak)이라 그래프에 보이는 봉우리와 같다.
+    /// 그래프 탭이 다시 그릴 때마다 부르니 배열을 만들지 않고 한 번 훑는다
     func summary(since start: TimeInterval) -> (average: Double, maximum: Double)? {
-        let values = points(since: start).filter { $0.time >= start }.map(\.value)
-        guard let maximum = values.max() else { return nil }
-        return (values.reduce(0, +) / Double(values.count), maximum)
+        let fineStart = fine.first?.time ?? .infinity
+        // 시간으로 무게를 준다: 1분 평균 점은 60초, 원본 점은 다음 점까지의 간격(1~2초, 끊긴 곳은 최대 10초).
+        // 점 개수로 평균하면 24시간 평균이 원본 점이 많은 최근 1시간 쪽으로 쏠린다
+        var sum = 0.0
+        var weight = 0.0
+        var maximum = -Double.infinity
+        func add(_ point: Point, weight w: Double) {
+            sum += point.value * w
+            weight += w
+            maximum = max(maximum, point.peak)
+        }
+        if start < fineStart {
+            for point in coarse[Self.indexBefore(start, in: coarse)...] where point.time >= start && point.time < fineStart {
+                add(point, weight: Self.coarseStep)
+            }
+        }
+        let maximumGap: TimeInterval = 10
+        for index in fine.indices[Self.indexBefore(start, in: fine)...] where fine[index].time >= start {
+            let gap = index + 1 < fine.count ? fine[index + 1].time - fine[index].time
+                : index > 0 ? fine[index].time - fine[index - 1].time : 1
+            add(fine[index], weight: min(max(gap, 0), maximumGap))
+        }
+        guard weight > 0 else { return nil }
+        return (sum / weight, maximum)
     }
 
     private static func indexBefore(_ time: TimeInterval, in points: [Point]) -> Int {
@@ -119,6 +149,12 @@ struct StatsHistory {
 
     mutating func prune(now: TimeInterval) {
         for metric in Array(series.keys) { series[metric]?.prune(now: now) }
+    }
+
+    /// 예전 버전은 USB 이더넷 등을 뺄 때 네트워크 속도를 1.8e19 B/s로 기록했다. 남아 있으면 그래프 눈금이
+    /// 24시간 동안 망가지므로 불러올 때 지운다 (100GB/s는 어떤 맥의 네트워크로도 나올 수 없는 값)
+    mutating func discardImpossibleValues() {
+        for metric in [Metric.networkIn, .networkOut] { series[metric]?.discard(above: 100e9) }
     }
 }
 

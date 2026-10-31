@@ -16,7 +16,7 @@ enum Benchmark {
 
         if only == nil { measureSamplers() }
 
-        let stats = StatsStore()
+        let stats = StatsStore(savesHistory: false)
         let fans = FanController()
         let model = NotchModel()
         stats.start()
@@ -50,12 +50,14 @@ enum Benchmark {
         let cpuStart = cpuTime()
         let wallStart = Date()
         let drawsStart = TimeGraph.drawCount
+        let layoutsStart = HostingLayoutCounter.count
         RunLoop.main.run(until: wallStart.addingTimeInterval(seconds))
         let elapsed = Date().timeIntervalSince(wallStart)
         let percent = (cpuTime() - cpuStart) / elapsed * 100
         let draws = Double(TimeGraph.drawCount - drawsStart) / elapsed
+        let layouts = Double(HostingLayoutCounter.count - layoutsStart) / elapsed
         print(name.padding(toLength: 14, withPad: " ", startingAt: 0)
-              + String(format: "%6.2f%%   그래프 %5.1f번/초", percent, draws))
+              + String(format: "%6.2f%%   그래프 %5.1f번/초   배치 %7.1f번/초", percent, draws, layouts))
     }
 
     /// 이 프로세스가 지금까지 쓴 CPU 시간 (모든 스레드, 초)

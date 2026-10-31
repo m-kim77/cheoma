@@ -43,10 +43,24 @@ enum NotifyCommand {
     }
 
     /// 받는 쪽 (실행 중인 앱): 알 수 없는 기호나 색은 기본값으로
-    static func alert(from notification: Notification) -> NotchAlert? {
-        guard let info = notification.userInfo, let text = info["text"] as? String, !text.isEmpty else { return nil }
-        let symbol = (info["symbol"] as? String).flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil ? $0 : nil }
-        let color = (info["color"] as? String).flatMap { colors[$0.lowercased()] }
-        return NotchAlert(symbol: symbol ?? "bell.fill", tint: color ?? .orange, text: String(text.prefix(maxLength)))
+    /// 받은 알림의 내용
+    struct Info: Sendable {
+        let text: String
+        let symbol: String?
+        let color: String?
+
+        init?(_ notification: Notification) {
+            guard let info = notification.userInfo, let text = info["text"] as? String, !text.isEmpty else { return nil }
+            self.text = text
+            symbol = info["symbol"] as? String
+            color = info["color"] as? String
+        }
+
+        @MainActor
+        var alert: NotchAlert {
+            let symbol = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil ? $0 : nil }
+            let color = color.flatMap { colors[$0.lowercased()] }
+            return NotchAlert(symbol: symbol ?? "bell.fill", tint: color ?? .orange, text: String(text.prefix(maxLength)))
+        }
     }
 }

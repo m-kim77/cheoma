@@ -43,6 +43,8 @@ struct TimeGraph: View {
     /// 세로축 최대값 라벨 (없으면 format)
     var axisFormat: ((Double) -> String)?
     var detailed = false
+    /// 있으면 이 시계가 갈 때마다 다시 그려서 흐르듯 보인다. 없으면 새 값이 들어올 때만 다시 그린다
+    var clock: GraphClock?
 
     @State private var hoverX: CGFloat?
 
@@ -59,13 +61,14 @@ struct TimeGraph: View {
 
     var body: some View {
         GeometryReader { geo in
-            if detailed {
+            if let clock {
                 // 큰 그래프는 한 포인트 움직일 때마다 다시 그려서 흐르듯 보이게 한다 (긴 구간일수록 덜 자주).
-                // .animation 일정은 화면 주사율(120Hz)마다 깨어나므로, 필요한 간격에만 깨어나는 .periodic을 쓴다
-                let interval = max(1.0 / 30, span / Double(max(geo.size.width, 1)))
-                TimelineView(.periodic(from: .now, by: interval)) { context in
-                    canvas(now: context.date)
-                }
+                // TimelineView는 쓰지 않는다: .animation은 화면 주사율마다 깨어나고, .periodic은 간격이 0.3초쯤보다
+                // 짧으면 창 배치를 쉬지 않고 되풀이해서 1분 구간 그래프 탭이 CPU를 110% 썼다 (macOS 26)
+                let interval = span / Double(max(geo.size.width, 1))
+                ClockReader(clock: clock) { canvas(now: $0) }
+                    .onAppear { clock.interval = interval }
+                    .onChange(of: interval) { _, new in clock.interval = new }
             } else {
                 // 작은 그래프(60초를 64pt)는 1초에 1pt 움직이므로 새 값이 들어올 때(1초) 다시 그리는 것으로 충분하다.
                 // 따로 타이머를 두면 깨어날 때마다 대시보드 전체 배치를 다시 계산해서 CPU를 꽤 쓴다 (개요 탭 9% → 2%)
@@ -283,4 +286,42 @@ struct TimeGraph: View {
     private static func tickLabel(_ date: Date, step: TimeInterval) -> String {
         (step < 60 ? secondsFormatter : minutesFormatter).string(from: date)
     }
+}
+
+/// 흐르는 그래프들이 같이 쓰는 시계. 한 화면의 그래프가 모두 같은 순간에 다시 그려져서
+/// 창 배치가 그래프 수만큼이 아니라 한 번만 일어난다. 보이는 동안 `run()`을 `.task`로 돌린다
+@MainActor
+final class GraphClock: ObservableObject {
+    @Published private(set) var now = Date()
+    /// 그래프가 1pt 움직이는 시간. 그래프가 자기 폭으로 계산해서 알려 준다.
+    /// 구간을 바꾸면(24시간 → 1분) 바로 지금 시각으로 다시 그린다
+    var interval: TimeInterval = 1 {
+        didSet { if interval != oldValue { now = Date() } }
+    }
+
+    /// 초당 30번보다 자주는 그리지 않는다
+    private static let minimumInterval: TimeInterval = 1.0 / 30
+    /// 긴 간격(24시간 구간은 약 5분)도 한 번에 다 자지 않고 이만큼씩 깨어 간격이 바뀌었는지 본다
+    private static let longestSleep: TimeInterval = 1
+
+    func run() async {
+        now = Date()
+        while !Task.isCancelled {
+            let due = now.addingTimeInterval(max(interval, Self.minimumInterval))
+            let wait = due.timeIntervalSinceNow
+            if wait > 0 {
+                try? await Task.sleep(for: .seconds(min(wait, Self.longestSleep)))
+            } else {
+                now = Date()
+            }
+        }
+    }
+}
+
+/// 시계가 갈 때 이 뷰만 다시 그린다 (부모 뷰는 다시 계산하지 않는다)
+private struct ClockReader<Content: View>: View {
+    @ObservedObject var clock: GraphClock
+    @ViewBuilder let content: (Date) -> Content
+
+    var body: some View { content(clock.now) }
 }

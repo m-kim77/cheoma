@@ -56,7 +56,8 @@ struct DashboardView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 0) {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            // 시·분만 보여 주니 분이 바뀔 때만 다시 그린다
+            TimelineView(.everyMinute) { context in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     // 시계는 한 줄로 둔다. 좁은 탭에서 "오전"과 시각이 두 줄로 갈라지면 그만큼 아래 내용이 밀려 잘린다
                     Text(context.date, format: .dateTime.hour().minute())
@@ -311,6 +312,7 @@ private struct PowerTab: View {
 private struct ThermalTab: View {
     let thermal: ThermalStats?
     let history: StatsHistory
+    @StateObject private var clock = GraphClock()
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -343,12 +345,13 @@ private struct ThermalTab: View {
                           lines: [GraphLine(metric: .cpuTemperature, label: "CPU", color: .orange),
                                   GraphLine(metric: .gpuTemperature, label: "GPU", color: .purple, style: .line)],
                           span: 600, scale: .fixed(100), format: { Format.celsius($0) },
-                          axisFormat: { "\(Int($0))°C" }, detailed: true)
+                          axisFormat: { "\(Int($0))°C" }, detailed: true, clock: clock)
             }
             .padding(12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
+        .task { await clock.run() }
     }
 
     private func row(_ label: String, _ celsius: Double?) -> some View {
@@ -389,6 +392,8 @@ private struct GraphsTab: View {
     let snapshot: StatsSnapshot
     let history: StatsHistory
     @AppStorage("graphRange") private var range = GraphRange.minute
+    /// 그래프 네 개가 같은 순간에 같이 흐르도록 시계 하나를 나눠 쓴다
+    @StateObject private var clock = GraphClock()
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 8) {
@@ -398,12 +403,12 @@ private struct GraphsTab: View {
                     card("CPU", value: Format.percent(snapshot.cpu), accent: .blue,
                          summary: summary(.cpu) { Format.percent($0) }) {
                         TimeGraph(history: history, lines: [GraphLine(metric: .cpu, label: "CPU", color: .blue)],
-                                  span: range.seconds, detailed: true)
+                                  span: range.seconds, detailed: true, clock: clock)
                     }
                     card("GPU", value: Format.percent(snapshot.gpu), accent: .purple,
                          summary: summary(.gpu) { Format.percent($0) }) {
                         TimeGraph(history: history, lines: [GraphLine(metric: .gpu, label: "GPU", color: .purple)],
-                                  span: range.seconds, detailed: true)
+                                  span: range.seconds, detailed: true, clock: clock)
                     }
                 }
                 GridRow {
@@ -414,7 +419,7 @@ private struct GraphsTab: View {
                                           GraphLine(metric: .cpuPower, label: "CPU", color: .blue, style: .line),
                                           GraphLine(metric: .gpuPower, label: "GPU", color: .purple, style: .line)],
                                   span: range.seconds, scale: .auto(minimum: 10),
-                                  format: { Format.watts($0) }, axisFormat: { "\(Int($0))W" }, detailed: true)
+                                  format: { Format.watts($0) }, axisFormat: { "\(Int($0))W" }, detailed: true, clock: clock)
                     }
                     card("네트워크",
                          value: "↓\(Format.rate(snapshot.network?.inPerSecond)) ↑\(Format.rate(snapshot.network?.outPerSecond))",
@@ -423,11 +428,12 @@ private struct GraphsTab: View {
                                   lines: [GraphLine(metric: .networkIn, label: "↓", color: .teal, aggregate: .maximum),
                                           GraphLine(metric: .networkOut, label: "↑", color: .orange, style: .line, aggregate: .maximum)],
                                   span: range.seconds, scale: .auto(minimum: 100_000),
-                                  format: { Format.rate($0) }, detailed: true)
+                                  format: { Format.rate($0) }, detailed: true, clock: clock)
                     }
                 }
             }
         }
+        .task { await clock.run() }
     }
 
     private var rangePicker: some View {

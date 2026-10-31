@@ -13,7 +13,8 @@ final class StatusBarController: NSObject {
     private static let hidingLength: CGFloat = 10_000
     private static let hidingDefaultsKey = "statusBar.isCollapsed"
 
-    private(set) var isHiding = UserDefaults.standard.bool(forKey: hidingDefaultsKey)
+    /// 저장된 값은 아이콘 창이 자리를 잡은 뒤 순서를 확인하고 적용한다 (restoreSavedHiding)
+    private(set) var isHiding = false
     /// 정리 모드이거나 화면 밖 아이콘을 누르는 동안 잠깐 구분선을 풀어둔 상태 (저장하지 않음)
     private var isTemporarilyRevealed = false
     private let menu = NSMenu()
@@ -25,6 +26,8 @@ final class StatusBarController: NSObject {
     private var restoreTimer: Timer?
     private var restoreStarted = Date()
     private var restorePID: pid_t = 0
+    /// 누르기 직전에 그 앱이 띄워 둔 창들. 그 뒤 새로 생긴 창만 메뉴로 본다
+    private var windowsBeforePress: Set<CGWindowID> = []
     private var popupAppeared = false
     var onTestAlert: (() -> Void)?
     /// 노치를 펼쳤을 때 모양 (메뉴의 체크 표시와 선택)
@@ -54,6 +57,31 @@ final class StatusBarController: NSObject {
         hiddenPanel.onFinishEditing = { [weak self] in self?.finishEditing() }
         buildMenu()
         applyState()
+        restoreSavedHiding()
+    }
+
+    /// 지난번에 숨기기를 켜 뒀으면 다시 켠다. 그사이 ⌄가 | 왼쪽으로 옮겨졌으면 ⌄까지 화면 밖으로 밀려
+    /// 앱 안에서 되돌릴 수 없게 되므로 켜지 않는다. 아이콘 창은 만든 직후에는 자리가 없어서 조금 기다렸다 확인한다
+    private func restoreSavedHiding(attempt: Int = 0) {
+        guard UserDefaults.standard.bool(forKey: Self.hidingDefaultsKey), !isHiding else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            // 그사이 사용자가 숨기기를 직접 바꿨으면 그대로 둔다
+            guard let self, UserDefaults.standard.bool(forKey: Self.hidingDefaultsKey), !self.isHiding else { return }
+            if self.hasPositions {
+                if self.separatorIsLeftOfToggle {
+                    self.isHiding = true
+                    self.applyState()
+                } else {
+                    AppLog.write("메뉴바: ⌄가 | 왼쪽에 있어서 숨기기를 켜지 않음")
+                }
+            } else if attempt < 10 {
+                self.restoreSavedHiding(attempt: attempt + 1)
+            }
+        }
+    }
+
+    private var hasPositions: Bool {
+        (separatorItem.button?.window?.frame.width ?? 0) > 0 && (toggleItem.button?.window?.frame.width ?? 0) > 0
     }
 
     private func buildMenu() {
@@ -136,11 +164,15 @@ final class StatusBarController: NSObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.hiddenPanel.refresh() }
     }
 
-    /// "완료"를 눌렀을 때만: | 왼쪽에 아이콘이 있으면 숨기기를 켠다 (패널을 그냥 닫은 경우는 그대로 둔다)
+    /// "완료"를 눌렀을 때만: | 왼쪽에 아이콘이 있으면 숨기기를 켠다 (패널을 그냥 닫은 경우는 그대로 둔다).
+    /// 앱마다 손쉬운 사용 요청을 보내므로 메인 스레드를 막지 않게 백그라운드에서 읽는다
     private func finishEditing() {
-        guard !isHiding, let separator = separatorItem.button?.window?.frame.minX,
-              MenuBarItemScanner.allItems().contains(where: { $0.frame.maxX <= separator + 1 }) else { return }
-        setHiding(true)
+        guard !isHiding, let separator = separatorItem.button?.window?.frame.minX else { return }
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let hasHiddenItems = MenuBarItemScanner.allItems().contains { $0.frame.maxX <= separator + 1 }
+            guard hasHiddenItems else { return }
+            await self?.setHiding(true)
+        }
     }
 
     // MARK: - 숨긴 아이콘 열기
@@ -148,15 +180,23 @@ final class StatusBarController: NSObject {
     /// 노치 뒤의 아이콘(자리가 없어 macOS가 숨긴 것)은 화면 좌표 안에 있으므로 그대로 누르면 메뉴가 화면 안에 열린다.
     /// 구분선으로 화면 밖에 밀어둔 아이콘만 잠깐 구분선을 풀었다가 메뉴가 닫히면 되돌린다. 마우스는 움직이지 않는다.
     private func open(_ item: MenuBarItem) {
-        let needsReveal = isHiding && !isTemporarilyRevealed && !Self.isOnAnyScreen(item.frame)
-        if needsReveal {
-            isTemporarilyRevealed = true
-            applyState()
-        }
-        // 패널이 사라진 뒤에 눌러야 열린 메뉴가 바로 닫히지 않는다
-        DispatchQueue.main.asyncAfter(deadline: .now() + (needsReveal ? 0.3 : 0.15)) { [weak self] in
-            item.press()
-            if needsReveal { self?.restoreWhenPopupCloses(pid: item.pid) }
+        // 패널이 사라진 뒤에 눌러야 열린 메뉴가 바로 닫히지 않는다. 정리 모드에서 골랐으면 패널이 닫히면서 구분선이
+        // 다시 접혀 아이콘이 화면 밖으로 밀려났을 수 있으니, 목록을 읽을 때의 위치가 아니라 누르기 직전 위치로 판단한다
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self else { return }
+            let frame = item.currentFrame ?? item.frame
+            guard self.isHiding, !self.isTemporarilyRevealed, !Self.isOnAnyScreen(frame) else {
+                item.press()
+                return
+            }
+            self.isTemporarilyRevealed = true
+            self.applyState()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self else { return }
+                self.windowsBeforePress = Self.windowIDs(pid: item.pid)
+                item.press()
+                self.restoreWhenPopupCloses(pid: item.pid)
+            }
         }
     }
 
@@ -177,7 +217,7 @@ final class StatusBarController: NSObject {
     }
 
     private func checkPopup() {
-        let isOpen = Self.hasPopup(pid: restorePID)
+        let isOpen = Self.hasPopup(pid: restorePID, excluding: windowsBeforePress)
         popupAppeared = popupAppeared || isOpen
         let elapsed = Date().timeIntervalSince(restoreStarted)
         // 메뉴가 떴다가 닫혔거나, 메뉴 대신 일반 창을 여는 앱이라 끝내 안 떴을 때 다시 숨긴다
@@ -189,11 +229,21 @@ final class StatusBarController: NSObject {
     }
 
     /// 메뉴/팝오버는 일반 창(레이어 0)보다 높은 레이어로 뜬다. 창 목록의 위치·레이어는 화면 기록 권한 없이 읽힌다.
-    private static func hasPopup(pid: pid_t) -> Bool {
-        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
-        return windows.contains {
-            ($0[kCGWindowOwnerPID as String] as? pid_t) == pid && ($0[kCGWindowLayer as String] as? Int ?? 0) > 0
+    /// 메뉴바 아이콘 창(레이어 25)처럼 누르기 전부터 있던 창은 빼야, 메뉴가 닫힌 뒤에도 열린 것으로 보지 않는다
+    private static func hasPopup(pid: pid_t, excluding existing: Set<CGWindowID>) -> Bool {
+        windows(pid: pid).contains { window in
+            guard let id = window[kCGWindowNumber as String] as? CGWindowID, !existing.contains(id) else { return false }
+            return (window[kCGWindowLayer as String] as? Int ?? 0) > 0
         }
+    }
+
+    private static func windowIDs(pid: pid_t) -> Set<CGWindowID> {
+        Set(windows(pid: pid).compactMap { $0[kCGWindowNumber as String] as? CGWindowID })
+    }
+
+    private static func windows(pid: pid_t) -> [[String: Any]] {
+        let all = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        return all.filter { ($0[kCGWindowOwnerPID as String] as? pid_t) == pid }
     }
 
     private func applyState() {

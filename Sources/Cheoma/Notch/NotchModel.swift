@@ -5,6 +5,8 @@ struct NotchAlert: Equatable {
     let symbol: String
     let tint: Color
     let text: String
+    /// 과열·메모리·배터리 경고. 정보성 알림(잠금 해제, 충전기 등)에 덮이지 않는다
+    var isWarning = false
 }
 
 /// 노치 영역의 상태. 크기는 phase 하나로 결정되고, 뷰는 그 크기로 스프링 애니메이션한다.
@@ -28,6 +30,8 @@ final class NotchModel: ObservableObject {
     static let alertDuration: TimeInterval = 2.8
 
     @Published var notchSize = CGSize(width: 185, height: 32)
+    /// 노치 없는 화면에서 메뉴바가 숨었을 때(전체화면 등) 닫힌 가상 노치를 그리지 않는다
+    @Published var hidesVirtualNotch = false
     @Published private(set) var isOpen = false
     @Published private(set) var isHovering = false
     @Published private(set) var alert: NotchAlert?
@@ -63,6 +67,15 @@ final class NotchModel: ObservableObject {
     private var alertWork: DispatchWorkItem?
     /// 알림이 떠 있는 동안 노치에 마우스를 올리면 열 탭 (에이전트 알림 → 에이전트 탭)
     private var alertTab: DashboardTab?
+    /// 지금 알림이 끝나면 띄울 알림들 (얼마나 띄울지, 마우스를 올리면 열 탭과 함께)
+    private var pendingAlerts: [PendingAlert] = []
+    private static let maximumPendingAlerts = 3
+
+    private struct PendingAlert {
+        let alert: NotchAlert
+        let duration: TimeInterval
+        let tab: DashboardTab?
+    }
 
     var phase: Phase {
         if isOpen { return .open }
@@ -87,11 +100,18 @@ final class NotchModel: ObservableObject {
         }
         if isHovering != inHotZone { isHovering = inHotZone }
 
-        openWork?.cancel()
-        guard inHotZone else { return }
-        // 메뉴바 지나가다 실수로 열리지 않도록 짧게 머물러야 열림
+        guard inHotZone else {
+            openWork?.cancel()
+            openWork = nil
+            return
+        }
+        // 메뉴바 지나가다 실수로 열리지 않도록 짧게 머물러야 열림. 들어올 때 한 번만 잡는다:
+        // 움직일 때마다 다시 잡으면 마우스를 천천히 계속 움직이는 동안 끝없이 미뤄진다
+        guard openWork == nil else { return }
         let work = DispatchWorkItem { [weak self] in
-            guard let self, self.isHovering else { return }
+            guard let self else { return }
+            self.openWork = nil
+            guard self.isHovering else { return }
             if self.alert != nil, let tab = self.alertTab { self.tab = tab }
             self.isOpen = true
         }
@@ -105,15 +125,49 @@ final class NotchModel: ObservableObject {
         isOpen = true
     }
 
-    func show(_ alert: NotchAlert, duration: TimeInterval = alertDuration, opening tab: DashboardTab? = nil) {
+    /// 미리보기 렌더링용: 차례를 건너뛰고 바로 띄운다
+    func previewAlert(_ alert: NotchAlert) {
         self.alert = alert
-        alertTab = tab
-        alertWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            self?.alert = nil
-            self?.alertTab = nil
+        alertTab = nil
+    }
+
+    /// 알림 칸은 하나다. 경고는 정보성 알림을 밀어내고 바로 뜨고, 정보성 알림은 경고가 끝날 때까지 기다린다.
+    /// 경고끼리는 차례로 띄운다. 정보성 알림끼리는 새 것이 바로 바꾼다 (충전기를 꽂았다 뺐을 때처럼 마지막 상태가 중요하다)
+    func show(_ alert: NotchAlert, duration: TimeInterval = alertDuration, opening tab: DashboardTab? = nil) {
+        let item = PendingAlert(alert: alert, duration: duration, tab: tab)
+        if self.alert?.isWarning == true {
+            enqueue(item)
+        } else {
+            present(item)
         }
+    }
+
+    private func enqueue(_ item: PendingAlert) {
+        if !item.alert.isWarning { pendingAlerts.removeAll { !$0.alert.isWarning } }
+        pendingAlerts.append(item)
+        // 넘치면 정보성 알림부터 버린다
+        while pendingAlerts.count > Self.maximumPendingAlerts {
+            pendingAlerts.remove(at: pendingAlerts.firstIndex { !$0.alert.isWarning } ?? 0)
+        }
+    }
+
+    private func present(_ item: PendingAlert) {
+        alert = item.alert
+        alertTab = item.tab
+        alertWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.alertFinished() }
         alertWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + item.duration, execute: work)
+    }
+
+    /// 알림 시간이 끝났을 때 (테스트에서는 바로 부른다)
+    func alertFinished() {
+        // 기다리던 것 중 경고를 먼저
+        guard let index = pendingAlerts.firstIndex(where: \.alert.isWarning) ?? pendingAlerts.indices.first else {
+            alert = nil
+            alertTab = nil
+            return
+        }
+        present(pendingAlerts.remove(at: index))
     }
 }
