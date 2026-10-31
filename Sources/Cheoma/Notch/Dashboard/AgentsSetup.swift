@@ -7,6 +7,7 @@ struct AgentsSetupPane: View {
     @ObservedObject var store: AgentStore
     let isEmpty: Bool
     @Binding var pane: AgentsPane
+    @AppStorage(ClaudeUsageDisplay.defaultsKey) private var usageDisplay = ClaudeUsageDisplay.limits
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -26,6 +27,7 @@ struct AgentsSetupPane: View {
                 terminalRow
                 claudeRow
                 codexRow
+                usageRow
                 launchRow
             }
             Spacer(minLength: 0)
@@ -70,13 +72,20 @@ struct AgentsSetupPane: View {
             if targets.isEmpty {
                 SetupDetail(text: "Claude Code 설정 폴더(~/.claude)가 없어요")
             } else if targets.allSatisfy(\.isInstalled) {
-                SetupDone(text: targets.count > 1 ? "계정 \(targets.count)개 연결됨" : "연결됨")
+                let occupied = targets.filter { if case .occupied = $0.statusLine { return true }; return false }
+                if occupied.isEmpty {
+                    SetupDone(text: targets.count > 1 ? "계정 \(targets.count)개 연결됨" : "연결됨")
+                } else {
+                    SetupDetail(text: "연결됨 · \(occupied.map { AgentsStyle.accountName($0.configDir.lastPathComponent) }.joined(separator: ", "))은 "
+                                + "상태 줄을 다른 프로그램이 쓰고 있어서 구독 한도를 받을 수 없어요")
+                }
             } else {
                 VStack(alignment: .leading, spacing: 3) {
-                    SetupDetail(text: "선택을 기다리거나 차례가 끝나면 바로 알려요")
+                    SetupDetail(text: "선택을 기다리거나 차례가 끝나면 바로 알리고, 상태 줄로 구독 한도를 받아요")
                     HStack(spacing: 10) {
                         ForEach(targets, id: \.configDir) { target in
-                            Label(target.configDir.lastPathComponent, systemImage: target.isInstalled ? "checkmark.circle.fill" : "circle.dashed")
+                            Label(AgentsStyle.accountName(target.configDir.lastPathComponent),
+                                  systemImage: target.isInstalled ? "checkmark.circle.fill" : "circle.dashed")
                                 .font(.system(size: 9.5, weight: .medium))
                                 .foregroundStyle(target.isInstalled ? Color.green : Color.white.opacity(0.5))
                                 .lineLimit(1)
@@ -106,6 +115,30 @@ struct AgentsSetupPane: View {
             SetupRow(symbol: "bell.badge", title: "Codex") {
                 SetupDetail(text: "notify 자리를 \(program)에서 쓰고 있어서 건드리지 않았어요 · 상태는 화면을 읽어서 알아내요")
             }
+        }
+    }
+
+    /// 위쪽 Claude 사용량: 구독 한도(기본) 또는 API 가격으로 셈한 비용
+    private var usageRow: some View {
+        SetupRow(symbol: "gauge.with.dots.needle.50percent", title: "Claude 사용량") {
+            SetupDetail(text: usageDisplay == .limits ? "구독의 5시간 · 주간 한도를 쓴 비율" : "쓴 토큰을 API 가격으로 셈한 값 · 구독이면 실제로 청구되지 않아요")
+            HStack(spacing: 2) {
+                ForEach(ClaudeUsageDisplay.allCases, id: \.self) { option in
+                    Button { usageDisplay = option } label: {
+                        Text(option.title)
+                            .font(.system(size: 10, weight: .semibold))
+                            .lineLimit(1)
+                            .fixedSize()
+                            .padding(.horizontal, 9)
+                            .frame(height: 22)
+                            .background(usageDisplay == option ? Color.white.opacity(0.2) : .clear, in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(2)
+            .background(.white.opacity(0.07), in: Capsule())
         }
     }
 

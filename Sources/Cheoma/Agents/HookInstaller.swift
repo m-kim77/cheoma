@@ -1,14 +1,26 @@
 import Foundation
 
 /// 에이전트 설정에 Cheoma 훅을 넣고 뺀다.
-/// - Claude Code: 설정 폴더마다 settings.json의 hooks에 Cheoma 항목을 합쳐 넣는다. 다른 설정과 훅은 그대로 두고, 처음 고치기 전에 백업한다
+/// - Claude Code: 설정 폴더마다 settings.json의 hooks에 Cheoma 항목을 합쳐 넣고, 상태 줄(statusLine)이 비어 있으면 Cheoma 상태 줄을 건다
+///   (구독 한도는 상태 줄 입력으로만 받을 수 있다). 다른 설정과 훅은 그대로 두고, 처음 고치기 전에 백업한다
 /// - Codex: config.toml의 notify가 비어 있을 때만 넣는다 (notify는 프로그램 하나만 받아서, 다른 것이 있으면 건드리지 않는다)
 /// 훅 명령은 지금 실행 중인 Cheoma 실행 파일을 부른다. 앱이 없어져도 에이전트가 오류를 내지 않게 `[ -x … ]`로 감싼다
 enum HookInstaller {
     /// Claude Code 설정 폴더 하나 (~/.claude, ~/.claude-account2 …)
     struct ClaudeTarget: Equatable, Sendable {
         var configDir: URL
-        var isInstalled: Bool
+        var hooks: Bool
+        var statusLine: StatusLineState
+
+        /// 더 넣을 것이 없다 (상태 줄을 다른 프로그램이 쓰고 있으면 훅만으로 끝)
+        var isInstalled: Bool { hooks && statusLine != .notInstalled }
+    }
+
+    enum StatusLineState: Equatable, Sendable {
+        case notInstalled
+        case installed
+        /// 다른 상태 줄이 있어서 건드리지 않는다 (구독 한도는 못 받는다)
+        case occupied(String)
     }
 
     enum CodexStatus: Equatable, Sendable {
@@ -27,6 +39,7 @@ enum HookInstaller {
 
     /// 훅 명령에 들어 있으면 Cheoma 것으로 본다
     static let marker = "--agent-event"
+    static let statusLineMarker = "--agent-statusline"
     /// Cheoma가 듣는 Claude Code 훅
     static let claudeEvents = ["Notification", "Stop", "UserPromptSubmit", "SessionStart", "SessionEnd"]
     static let backupSuffix = ".cheoma-backup"
@@ -34,7 +47,8 @@ enum HookInstaller {
     static func status(home: URL = FileManager.default.homeDirectoryForCurrentUser,
                        environment: [String: String] = ProcessInfo.processInfo.environment) -> Status {
         let claude = AgentUsageReader.claudeConfigDirs(home: home, environment: environment).map { dir in
-            ClaudeTarget(configDir: dir, isInstalled: isClaudeInstalled(settings: readJSON(dir.appendingPathComponent("settings.json"))))
+            let settings = readJSON(dir.appendingPathComponent("settings.json"))
+            return ClaudeTarget(configDir: dir, hooks: isClaudeInstalled(settings: settings), statusLine: statusLineState(settings: settings))
         }
         let config = AgentUsageReader.codexHome(home: home, environment: environment).appendingPathComponent("config.toml")
         let codex: CodexStatus
@@ -53,13 +67,45 @@ enum HookInstaller {
         let file = configDir.appendingPathComponent("settings.json")
         var settings = try readSettings(file)
         settings = installingClaude(into: settings, command: command(executable: executable, kind: .claude))
+        // 다른 상태 줄이 있으면 그대로 둔다
+        settings = installingStatusLine(into: settings, command: statusLineCommand(executable: executable, configDir: configDir))
         try write(settings, to: file)
     }
 
     static func uninstallClaude(configDir: URL) throws {
         let file = configDir.appendingPathComponent("settings.json")
         guard FileManager.default.fileExists(atPath: file.path) else { return }
-        try write(removingClaude(from: try readSettings(file)), to: file)
+        try write(removingStatusLine(from: removingClaude(from: try readSettings(file))), to: file)
+    }
+
+    // MARK: - Claude Code 상태 줄
+
+    static func statusLineState(settings: [String: Any]?) -> StatusLineState {
+        guard let line = settings?["statusLine"] as? [String: Any] else { return .notInstalled }
+        let command = line["command"] as? String ?? ""
+        if command.contains(statusLineMarker) && command.contains("Cheoma") { return .installed }
+        if command.isEmpty { return .notInstalled }
+        return .occupied(command)
+    }
+
+    /// 상태 줄이 비어 있거나 Cheoma 것이면 Cheoma 상태 줄로 (다른 상태 줄은 그대로 둔다). 순수 함수
+    static func installingStatusLine(into settings: [String: Any], command: String) -> [String: Any] {
+        if case .occupied = statusLineState(settings: settings) { return settings }
+        var settings = settings
+        settings["statusLine"] = ["type": "command", "command": command, "padding": 0]
+        return settings
+    }
+
+    static func removingStatusLine(from settings: [String: Any]) -> [String: Any] {
+        guard statusLineState(settings: settings) == .installed else { return settings }
+        var settings = settings
+        settings["statusLine"] = nil
+        return settings
+    }
+
+    static func statusLineCommand(executable: String, configDir: URL) -> String {
+        let exe = shellQuoted(executable)
+        return "[ -x \(exe) ] && \(exe) \(statusLineMarker) \(shellQuoted(configDir.path)) || true"
     }
 
     /// settings에 Cheoma 훅을 넣는다 (있던 Cheoma 훅은 지우고 새 명령으로). 순수 함수
@@ -198,8 +244,12 @@ enum HookInstaller {
 
     /// 셸이 실행하는 훅 명령. 앱이 지워졌으면 아무것도 하지 않는다
     static func command(executable: String, kind: AgentKind) -> String {
-        let quoted = "'" + executable.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let quoted = shellQuoted(executable)
         return "[ -x \(quoted) ] && \(quoted) \(marker) \(kind.rawValue) || true"
+    }
+
+    private static func shellQuoted(_ text: String) -> String {
+        "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     private static func readJSON(_ file: URL) -> [String: Any]? {

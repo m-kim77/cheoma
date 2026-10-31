@@ -224,6 +224,7 @@ final class HookInstallerTests: XCTestCase {
         try HookInstaller.installCodex(executable: "/X/Cheoma", home: home, environment: environment)
         let status = HookInstaller.status(home: home, environment: environment)
         XCTAssertEqual(status.claude.map(\.isInstalled), [true])
+        XCTAssertEqual(status.claude.map(\.statusLine), [.installed])
         XCTAssertEqual(status.codex, .installed)
         XCTAssertEqual(try String(contentsOf: claude.appendingPathComponent("settings.json.cheoma-backup"), encoding: .utf8), original)
 
@@ -231,6 +232,7 @@ final class HookInstallerTests: XCTestCase {
         try HookInstaller.uninstallCodex(home: home, environment: environment)
         let after = HookInstaller.status(home: home, environment: environment)
         XCTAssertEqual(after.claude.map(\.isInstalled), [false])
+        XCTAssertEqual(after.claude.map(\.statusLine), [.notInstalled])
         XCTAssertEqual(after.codex, .notInstalled)
         XCTAssertEqual(try String(contentsOf: codex.appendingPathComponent("config.toml"), encoding: .utf8), "model = \"o3\"\n")
     }
@@ -242,5 +244,64 @@ final class HookInstallerTests: XCTestCase {
         try "{ // comment\n}".write(to: dir.appendingPathComponent("settings.json"), atomically: true, encoding: .utf8)
         XCTAssertThrowsError(try HookInstaller.installClaude(configDir: dir, executable: "/X/Cheoma"))
         XCTAssertEqual(try String(contentsOf: dir.appendingPathComponent("settings.json"), encoding: .utf8), "{ // comment\n}")
+    }
+}
+
+final class ClaudeStatusLineTests: XCTestCase {
+    private let input = #"""
+    {"session_id":"s","rate_limits":{"five_hour":{"used_percentage":12,"resets_at":1793431200},"seven_day":{"used_percentage":68.4,"resets_at":1793685600}}}
+    """#
+
+    func testReadsLimits() throws {
+        let windows = try XCTUnwrap(ClaudeStatusLine.limits(from: Data(input.utf8)))
+        XCTAssertEqual(windows.map(\.windowMinutes), [300, 10_080])
+        XCTAssertEqual(windows.map(\.usedPercent), [12, 68.4])
+        XCTAssertEqual(windows.first?.resetsAt, Date(timeIntervalSince1970: 1_793_431_200))
+        XCTAssertEqual(ClaudeStatusLine.line(windows, now: Date(timeIntervalSince1970: 1_793_420_000)), "5시간 12% · 주간 68%")
+        // 초기화 시각이 지났으면 0%
+        XCTAssertEqual(ClaudeStatusLine.line(windows, now: Date(timeIntervalSince1970: 1_793_500_000)), "5시간 0% · 주간 68%")
+    }
+
+    func testNoLimitsBeforeFirstRequest() {
+        XCTAssertNil(ClaudeStatusLine.limits(from: Data(#"{"session_id":"s","model":{"id":"x"}}"#.utf8)))
+        XCTAssertNil(ClaudeStatusLine.limits(from: Data("nope".utf8)))
+    }
+
+    func testSaveAndLoad() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("cheoma-limits-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: home) }
+        let windows = try XCTUnwrap(ClaudeStatusLine.limits(from: Data(input.utf8)))
+        let date = Date(timeIntervalSince1970: 1_793_420_000)
+        ClaudeStatusLine.save(windows, account: ".claude-account2", date: date, home: home)
+        let loaded = try XCTUnwrap(ClaudeStatusLine.load(account: ".claude-account2", home: home))
+        XCTAssertEqual(loaded.windows, windows)
+        XCTAssertEqual(loaded.updatedAt, date)
+        XCTAssertNil(ClaudeStatusLine.load(account: ".claude", home: home))
+    }
+
+    func testLiveSessionFile() throws {
+        let json = #"{"pid":30114,"sessionId":"d4eab328","cwd":"/x","status":"waiting","statusUpdatedAt":1793427614159}"#
+        let live = try XCTUnwrap(ClaudeStatusLine.liveSession(json: Data(json.utf8), account: ".claude"))
+        XCTAssertEqual(live.sessionID, "d4eab328")
+        XCTAssertEqual(live.status, "waiting")
+        XCTAssertEqual(live.statusSince, Date(timeIntervalSince1970: 1_793_427_614.159))
+        XCTAssertNil(ClaudeStatusLine.liveSession(json: Data("{}".utf8), account: ".claude"))
+    }
+
+    func testStatusLineInstallLeavesOtherStatusLineAlone() {
+        let command = HookInstaller.statusLineCommand(executable: "/A/Cheoma", configDir: URL(fileURLWithPath: "/Users/me/.claude-account2"))
+        XCTAssertEqual(command, "[ -x '/A/Cheoma' ] && '/A/Cheoma' --agent-statusline '/Users/me/.claude-account2' || true")
+        let installed = HookInstaller.installingStatusLine(into: ["model": "opus"], command: command)
+        XCTAssertEqual(HookInstaller.statusLineState(settings: installed), .installed)
+        XCTAssertNil(HookInstaller.removingStatusLine(from: installed)["statusLine"])
+
+        let other: [String: Any] = ["statusLine": ["type": "command", "command": "~/bin/my-line.sh"]]
+        XCTAssertEqual(HookInstaller.statusLineState(settings: other), .occupied("~/bin/my-line.sh"))
+        let kept = HookInstaller.installingStatusLine(into: other, command: command)
+        XCTAssertEqual((kept["statusLine"] as? [String: Any])?["command"] as? String, "~/bin/my-line.sh")
+        XCTAssertEqual((HookInstaller.removingStatusLine(from: other)["statusLine"] as? [String: Any])?["command"] as? String, "~/bin/my-line.sh")
+        // 다른 상태 줄이 있어도 훅만 들어가면 연결된 것으로 친다
+        let target = HookInstaller.ClaudeTarget(configDir: URL(fileURLWithPath: "/x"), hooks: true, statusLine: .occupied("x"))
+        XCTAssertTrue(target.isInstalled)
     }
 }

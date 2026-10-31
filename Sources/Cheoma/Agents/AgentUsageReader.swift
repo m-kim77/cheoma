@@ -59,7 +59,10 @@ final class AgentUsageReader {
         let codexHome = Self.codexHome(home: URL(fileURLWithPath: home), environment: environment).path
         usage.codex = refreshCodex(codexHome: codexHome, now: now, sessions: &sessions)
 
-        usage.recentSessions = Array(sessions.sorted { $0.lastActivity > $1.lastActivity }.prefix(Self.maxRecentSessions))
+        // 이어 한 Codex 세션은 기록 파일이 여러 개라 같은 세션이 두 번 나온다. 가장 최근 것만 남긴다
+        var seen = Set<String>()
+        let unique = sessions.sorted { $0.lastActivity > $1.lastActivity }.filter { seen.insert("\($0.kind.rawValue):\($0.id)").inserted }
+        usage.recentSessions = Array(unique.prefix(Self.maxRecentSessions))
         return usage
     }
 
@@ -226,6 +229,10 @@ final class AgentUsageReader {
         var usage = ClaudeUsage(account: URL(fileURLWithPath: account.dir).lastPathComponent, todayCostUSD: todayCost, todayTokens: todayTokens,
                                 blockCostUSD: 0, blockStartedAt: nil, blockEndsAt: nil,
                                 updatedAt: account.records.last.map { Date(timeIntervalSince1970: $0.time) })
+        if let limits = ClaudeStatusLine.load(account: usage.account, home: URL(fileURLWithPath: home)) {
+            usage.limits = limits.windows
+            usage.limitsUpdatedAt = limits.updatedAt
+        }
         if let blockStart, now - lastTime < Self.blockLength, now < blockStart + Self.blockLength {
             usage.blockCostUSD = blockCost
             usage.blockStartedAt = Date(timeIntervalSince1970: blockStart)

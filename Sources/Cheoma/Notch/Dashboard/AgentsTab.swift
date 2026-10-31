@@ -22,7 +22,7 @@ struct AgentsTab: View {
     static let listWidth: CGFloat = 232
 
     var body: some View {
-        let sessions = AgentsStyle.sorted(store.sessions)
+        let sessions = store.sessions
         let selected = store.selectedSession
         VStack(spacing: 8) {
             AgentsUsageStrip(usage: store.usage, pane: $pane)

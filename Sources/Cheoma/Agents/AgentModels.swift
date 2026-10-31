@@ -177,9 +177,38 @@ struct ClaudeUsage: Equatable, Sendable {
     var blockCostUSD: Double
     var blockStartedAt: Date?
     var blockEndsAt: Date?
-    /// 남은 한도를 알 수 있으면 채운다 (기록에 없으면 nil)
+    /// 구독의 5시간 · 주간 한도 (Cheoma 상태 줄이 받아 둔 값). 상태 줄을 연결하지 않았거나 아직 요청이 없었으면 비어 있다
     var limits: [UsageWindow] = []
     var updatedAt: Date?
+    /// limits를 받은 시각 (그 계정으로 Claude Code를 마지막으로 쓴 때)
+    var limitsUpdatedAt: Date?
+}
+
+/// 에이전트 탭 위쪽의 Claude 사용량을 무엇으로 보여줄지 (연결 설정에서 고른다)
+enum ClaudeUsageDisplay: String, CaseIterable, Sendable {
+    /// 구독의 5시간 · 주간 한도를 쓴 비율 (기본)
+    case limits
+    /// 기록의 토큰을 API 가격으로 셈한 비용. 구독이면 실제로 청구되는 돈이 아니다
+    case cost
+
+    static let defaultsKey = "agents.claudeUsageDisplay"
+
+    var title: String {
+        switch self {
+        case .limits: "구독 한도"
+        case .cost: "API 환산 비용"
+        }
+    }
+}
+
+/// 돌고 있는 Claude Code 프로세스가 스스로 적어 두는 정보 (`<설정 폴더>/sessions/<pid>.json`)
+struct LiveClaudeSession: Equatable, Sendable {
+    var sessionID: String
+    /// 설정 폴더 이름 (".claude", ".claude-account2" …)
+    var account: String
+    /// "idle"(입력 기다림), "busy"(작업 중), "waiting"(권한 묻기)
+    var status: String?
+    var statusSince: Date?
 }
 
 /// 기록 파일로 아는 최근 세션. 터미널 밖 세션(Claude 데스크톱 앱, VS Code의 Codex 등)도 여기서 보인다 (보기만)

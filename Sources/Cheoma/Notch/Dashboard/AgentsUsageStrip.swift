@@ -1,29 +1,41 @@
 import SwiftUI
 
-/// 에이전트 탭 맨 위: Codex 사용 한도 · Claude 계정별 비용, 새 에이전트 · 연결 설정 버튼
+/// 에이전트 탭 맨 위: Codex 사용 한도 · Claude 계정별 구독 한도(또는 API 환산 비용), 새 에이전트 · 연결 설정 버튼
 struct AgentsUsageStrip: View {
     let usage: AgentUsage
     @Binding var pane: AgentsPane
+    @AppStorage(ClaudeUsageDisplay.defaultsKey) private var display = ClaudeUsageDisplay.limits
     static let height: CGFloat = 38
 
     var body: some View {
         HStack(spacing: 8) {
-            if let codex = usage.codex, codex.primary != nil || codex.secondary != nil {
-                CodexUsageCard(usage: codex)
-            }
-            if !usage.claude.isEmpty {
-                // 계정이 많아 자리가 모자라면 토큰 수를 빼고, 그래도 모자라면 앞의 계정만 보여준다
-                ViewThatFits(in: .horizontal) {
-                    ClaudeUsageCard(accounts: usage.claude, compact: false)
-                    ClaudeUsageCard(accounts: usage.claude, compact: true)
-                    ClaudeUsageCard(accounts: Array(usage.claude.prefix(2)), compact: true)
-                    ClaudeUsageCard(accounts: Array(usage.claude.prefix(1)), compact: true)
-                }
+            // 자리가 모자라면 Codex를 작은 막대로, Claude 비용은 토큰 수를 빼고, 그래도 모자라면 앞의 계정만 보여준다
+            ViewThatFits(in: .horizontal) {
+                cards(codexCompact: false, claude: usage.claude, compact: false)
+                cards(codexCompact: true, claude: usage.claude, compact: false)
+                cards(codexCompact: true, claude: usage.claude, compact: true)
+                cards(codexCompact: true, claude: Array(usage.claude.prefix(2)), compact: true)
+                cards(codexCompact: true, claude: Array(usage.claude.prefix(1)), compact: true)
             }
             Spacer(minLength: 0)
             buttons
         }
         .frame(height: Self.height)
+    }
+
+    private func cards(codexCompact: Bool, claude: [ClaudeUsage], compact: Bool) -> some View {
+        HStack(spacing: 8) {
+            if let codex = usage.codex, codex.primary != nil || codex.secondary != nil {
+                CodexUsageCard(usage: codex, compact: codexCompact)
+            }
+            if !claude.isEmpty {
+                switch display {
+                case .limits: ClaudeLimitsCard(accounts: claude)
+                case .cost: ClaudeUsageCard(accounts: claude, compact: compact)
+                }
+            }
+        }
+        .fixedSize()
     }
 
     private var buttons: some View {
@@ -60,12 +72,19 @@ struct AgentsUsageStrip: View {
 /// Codex 5시간 · 주간 한도: 쓴 비율 막대와 초기화까지 남은 시간
 private struct CodexUsageCard: View {
     let usage: CodexUsage
+    let compact: Bool
 
     var body: some View {
         HStack(spacing: 10) {
             UsageCardTitle(kind: .codex, title: "Codex", detail: usage.plan)
-            if let primary = usage.primary { WindowGauge(window: primary) }
-            if let secondary = usage.secondary { WindowGauge(window: secondary) }
+            if compact {
+                HStack(spacing: 8) {
+                    ForEach([usage.primary, usage.secondary].compactMap { $0 }, id: \.windowMinutes) { LimitGauge(window: $0) }
+                }
+            } else {
+                if let primary = usage.primary { WindowGauge(window: primary) }
+                if let secondary = usage.secondary { WindowGauge(window: secondary) }
+            }
         }
         .padding(.horizontal, 10)
         .frame(maxHeight: .infinity)
@@ -112,14 +131,94 @@ private struct WindowGauge: View {
     }
 }
 
-/// Claude 계정마다 오늘 비용 · 토큰과 지금 5시간 구간 비용
+/// 작은 한도 막대 한 줄: "5시간 ▬▬ 12%". 초기화 시각은 마우스를 올리면 보인다
+private struct LimitGauge: View {
+    let window: UsageWindow
+
+    var body: some View {
+        let now = Date()
+        let isReset = window.resetsAt.map { $0 <= now } ?? false
+        let percent = isReset ? 0 : window.usedPercent
+        HStack(spacing: 4) {
+            Text(AgentsStyle.windowName(minutes: window.windowMinutes))
+                .font(.system(size: 9.5))
+                .foregroundStyle(.secondary)
+                .fixedSize()
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.1))
+                Capsule().fill(AgentsStyle.usageColor(percent))
+                    .frame(width: max(30 * min(percent / 100, 1), 2))
+            }
+            .frame(width: 30, height: 3)
+            Text("\(Int(percent.rounded()))%")
+                .font(.system(size: 10.5, weight: .semibold))
+                .monospacedDigit()
+                .frame(width: 30, alignment: .trailing)
+        }
+        .help(help(now: now, isReset: isReset))
+    }
+
+    private func help(now: Date, isReset: Bool) -> String {
+        let name = AgentsStyle.windowName(minutes: window.windowMinutes)
+        guard let resetsAt = window.resetsAt else { return "\(name) 한도" }
+        return isReset ? "\(name) 한도 · 초기화됨" : "\(name) 한도 · \(AgentsStyle.until(resetsAt, now: now)) 초기화"
+    }
+}
+
+/// Claude 계정마다 구독의 5시간 · 주간 한도 (계정 하나에 한 줄)
+private struct ClaudeLimitsCard: View {
+    let accounts: [ClaudeUsage]
+
+    var body: some View {
+        HStack(spacing: 10) {
+            UsageCardTitle(kind: .claude, title: "Claude", detail: "구독")
+            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 3) {
+                ForEach(accounts, id: \.account) { account in
+                    GridRow {
+                        if accounts.count > 1 || account.account != ".claude" {
+                            Text(AgentsStyle.accountName(account.account))
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
+                        if account.limits.isEmpty {
+                            Text("한도 정보 없음")
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(.tertiary)
+                                .fixedSize()
+                                .gridCellColumns(2)
+                                .help("설정(톱니)에서 Claude Code를 연결한 뒤 이 계정으로 Claude를 한 번 쓰면 보여요")
+                        } else {
+                            ForEach(account.limits, id: \.windowMinutes) { LimitGauge(window: $0) }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(maxHeight: .infinity)
+        .background(AgentsStyle.cardFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .help(help)
+    }
+
+    private var help: String {
+        let lines = accounts.compactMap { account -> String? in
+            guard let date = account.limitsUpdatedAt else { return nil }
+            return "\(AgentsStyle.accountName(account.account)): \(AgentsStyle.ago(date)) 받은 값"
+        }
+        return (["Claude 구독 한도 (Claude Code 상태 줄에서 받아요)"] + lines).joined(separator: "\n")
+    }
+}
+
+/// Claude 계정마다 오늘 쓴 토큰을 API 가격으로 셈한 비용과 지금 5시간 구간 비용. 구독이면 실제로 청구되는 돈이 아니다
 private struct ClaudeUsageCard: View {
     let accounts: [ClaudeUsage]
     let compact: Bool
 
     var body: some View {
         HStack(spacing: 12) {
-            UsageCardTitle(kind: .claude, title: "Claude", detail: "오늘")
+            UsageCardTitle(kind: .claude, title: "Claude", detail: "API 환산")
             ForEach(accounts, id: \.account) { account in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -163,7 +262,8 @@ private struct ClaudeUsageCard: View {
     }
 
     private func help(_ account: ClaudeUsage) -> String {
-        var lines = ["\(account.account): 오늘 \(AgentsStyle.cost(account.todayCostUSD)) · 토큰 \(AgentsStyle.tokens(account.todayTokens))"]
+        var lines = ["\(AgentsStyle.accountName(account.account)): 오늘 \(AgentsStyle.cost(account.todayCostUSD)) · 토큰 \(AgentsStyle.tokens(account.todayTokens))",
+                     "쓴 토큰을 API 가격으로 셈한 값이에요. 구독이면 실제로 청구되지 않아요"]
         lines.append("지금 5시간 구간 \(AgentsStyle.cost(account.blockCostUSD))")
         if let end = account.blockEndsAt, end > Date() { lines.append("구간은 \(AgentsStyle.until(end)) 끝나요") }
         return lines.joined(separator: "\n")

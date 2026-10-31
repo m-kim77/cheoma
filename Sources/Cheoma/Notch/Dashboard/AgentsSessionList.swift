@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 에이전트 탭 왼쪽: 돌고 있는 세션 (봐야 하는 것 먼저), 그 아래 기록으로만 아는 최근 세션
+/// 에이전트 탭 왼쪽: 돌고 있는 세션 (최근에 움직인 것 먼저), 그 아래 기록으로만 아는 최근 세션
 struct AgentsSessionList: View {
     let sessions: [AgentSession]
     let recorded: [RecordedSession]
@@ -97,12 +97,15 @@ private struct SessionRow: View {
         return session.kind.displayName
     }
 
+    /// 어디서 도는지, 기본 계정이 아니면 계정 이름도 ("터미널 · account2")
     private var place: String {
-        switch session.location {
+        let where_: String = switch session.location {
         case .terminalApp: "터미널"
         case .tmux: "tmux"
         case .other(_, let app): app ?? "보기만"
         }
+        guard let account = session.account, account != ".claude" else { return where_ }
+        return "\(where_) · \(AgentsStyle.accountName(account))"
     }
 }
 

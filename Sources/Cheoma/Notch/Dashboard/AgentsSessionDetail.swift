@@ -284,6 +284,12 @@ struct AgentReplyField: View {
         OverlayPanel.requestKeyFocus()
         // 키 창이 된 다음 차례에 포커스를 줘야 글자 칸이 첫 응답자가 된다
         DispatchQueue.main.async { isFocused = true }
+        // 키 창이 늦게 되면 첫 포커스가 안 잡혀서, 그 사이 친 글자가 쓰던 앱(터미널)으로 간다. 잠깐 뒤 한 번 더 해 본다
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            guard !isFocused else { return }
+            OverlayPanel.requestKeyFocus()
+            isFocused = true
+        }
     }
 
     private func submit() {

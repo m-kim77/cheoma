@@ -21,6 +21,12 @@ struct AgentSession: Identifiable, Equatable, Sendable {
     var lastEvent: AgentHookEvent?
     /// Cheoma가 tmux로 띄운 세션 (노치에서 끝낼 수 있다)
     var isLaunchedByCheoma: Bool
+    /// 에이전트의 세션 ID (Claude Code가 적어 두는 sessions/<pid>.json). 기록의 제목을 이걸로 찾는다
+    var sessionID: String? = nil
+    /// Claude Code 설정 폴더 이름 (".claude", ".claude-account2" …): 어느 계정으로 도는지
+    var account: String? = nil
+    /// 목록 순서에 쓰는 마지막 움직임: 상태가 바뀐 때의 마지막 출력 시각 (출력마다 바꾸면 목록이 계속 뒤섞인다)
+    var lastActivity: Date = .distantPast
 
     /// 목록에 보여줄 이름: 작업 폴더 이름, 모르면 에이전트 이름
     var projectName: String {
@@ -55,6 +61,7 @@ final class AgentStore: ObservableObject {
     /// 사용자가 봐야 하는 세션이 생기면 노치 알림을 띄운다
     var onAlert: ((NotchAlert, AgentSession.ID) -> Void)?
 
+    /// 오른쪽에 보이는 세션. 고른 적이 없으면 목록 맨 위 (apply에서 그 세션으로 고정한다)
     var selectedSession: AgentSession? {
         sessions.first { $0.id == selectedID } ?? sessions.first
     }
@@ -310,13 +317,16 @@ final class AgentStore: ObservableObject {
             var session = sessions.first { $0.id == item.id } ?? AgentSession(
                 id: item.id, kind: item.kind, pid: item.pid, location: item.location, cwd: item.cwd, title: nil,
                 startedAt: item.startedAt, state: .unknown, stateSince: result.date, analysis: nil, screen: nil,
-                lastEvent: nil, isLaunchedByCheoma: item.isLaunchedByCheoma)
+                lastEvent: nil, isLaunchedByCheoma: item.isLaunchedByCheoma,
+                lastActivity: [item.lastOutput, item.statusSince, item.startedAt].compactMap { $0 }.max() ?? result.date)
             session.kind = item.kind
             session.pid = item.pid
             session.location = item.location
             session.cwd = item.cwd ?? session.cwd
             session.startedAt = item.startedAt ?? session.startedAt
             session.isLaunchedByCheoma = item.isLaunchedByCheoma
+            session.sessionID = item.sessionID ?? session.sessionID
+            session.account = item.account ?? session.account
             if let screen = item.screen {
                 session.screen = screen
                 session.analysis = item.analysis
@@ -328,7 +338,12 @@ final class AgentStore: ObservableObject {
                 session.lastEvent = pendingEvents.remove(at: index)
             }
             let state = decideState(session, item: item, now: result.date)
-            if state != session.state { transition(&session, to: state, at: result.date) }
+            if state != session.state {
+                transition(&session, to: state, at: result.date)
+                // 처음 판단(확인 중 → …)은 실제로 움직인 게 아니라서 마지막 출력 시각까지만 올린다
+                let moved = [item.lastOutput, item.statusSince].compactMap { $0 }.max()
+                session.lastActivity = max(session.lastActivity, moved ?? (state == .exited ? session.lastActivity : result.date))
+            }
             next.append(session)
         }
 
@@ -345,19 +360,26 @@ final class AgentStore: ObservableObject {
             next.append(session)
         }
 
-        // 세션 제목: 같은 폴더의 최근 기록 (Claude의 ai-title)
-        for index in next.indices where next[index].kind == .claude {
+        // 세션 제목 (Claude의 ai-title 등): 세션 ID로 찾는다. ID를 모르면 그 폴더에 세션이 하나뿐일 때만 폴더로 찾는다
+        // (같은 폴더의 터미널 여러 개가 다 같은 제목으로 보이지 않게)
+        for index in next.indices {
             let session = next[index]
-            let record = usage.recentSessions.first { record in
-                if let sessionID = session.lastEvent?.sessionID { return record.id == sessionID }
-                return record.kind == session.kind && record.cwd == session.cwd
+            let record: RecordedSession?
+            if let id = session.sessionID ?? session.lastEvent?.sessionID {
+                record = usage.recentSessions.first { $0.id == id }
+            } else if next.filter({ $0.kind == session.kind && $0.cwd == session.cwd }).count == 1 {
+                record = usage.recentSessions.first { $0.kind == session.kind && $0.cwd == session.cwd }
+            } else {
+                record = nil
             }
-            if let title = record?.title { next[index].title = title }
+            next[index].title = record?.title
         }
 
         sessions = next.sorted(by: Self.order)
         recordedSessions = usage.recentSessions.filter { record in
-            !sessions.contains { $0.kind == record.kind && $0.cwd == record.cwd && $0.state != .exited }
+            !sessions.contains { session in
+                session.sessionID == record.id || (session.kind == record.kind && session.cwd == record.cwd && session.state != .exited)
+            }
         }
         updateRecentFolders()
 
@@ -365,8 +387,9 @@ final class AgentStore: ObservableObject {
             selectedID = "tmux:\(paneID)"
             launchedPaneID = nil
         }
-        if let selectedID, !sessions.contains(where: { $0.id == selectedID }), launchedPaneID == nil {
-            self.selectedID = sessions.first?.id
+        // 고른 세션은 목록 순서가 바뀌어도 그대로 둔다 (답을 쓰는 중에 다른 세션으로 바뀌지 않게)
+        if launchedPaneID == nil, selectedID.map({ id in !sessions.contains { $0.id == id } }) ?? true {
+            selectedID = sessions.first?.id
         }
     }
 
@@ -378,6 +401,13 @@ final class AgentStore: ObservableObject {
             return analysis.state
         }
         if item.isActive { return .working }
+        // Claude Code가 스스로 적는 상태 (Terminal 권한이 없거나 VS Code 안에서 돌아 화면을 못 읽어도 정확하다)
+        switch item.agentStatus {
+        case "busy": return .working
+        case "waiting": return .needsChoice
+        case "idle": return .needsInput
+        default: break
+        }
         // 화면을 못 읽는 세션: 출력이 멈춘 뒤 들어온 훅을 따른다
         if let event = session.lastEvent, event.date >= (lastActiveAt[session.id] ?? .distantPast) {
             switch event.name {
@@ -544,19 +574,11 @@ final class AgentStore: ObservableObject {
         if result != recentFolders { recentFolders = result }
     }
 
-    /// 사용자가 봐야 하는 것부터, 그다음 오래된 순서 (목록이 자꾸 뒤섞이지 않게)
+    /// 최근에 움직인 것부터 (같으면 ID로 고정해서 줄이 뒤섞이지 않게). 끝난 세션은 맨 아래
     private static func order(_ a: AgentSession, _ b: AgentSession) -> Bool {
-        func rank(_ state: AgentState) -> Int {
-            switch state {
-            case .needsChoice: 0
-            case .needsInput: 1
-            case .working: 2
-            case .unknown: 3
-            case .exited: 4
-            }
-        }
-        if rank(a.state) != rank(b.state) { return rank(a.state) < rank(b.state) }
-        return (a.startedAt ?? .distantPast) < (b.startedAt ?? .distantPast)
+        if (a.state == .exited) != (b.state == .exited) { return b.state == .exited }
+        if a.lastActivity != b.lastActivity { return a.lastActivity > b.lastActivity }
+        return a.id < b.id
     }
 
     private static func shortName(_ kind: AgentKind) -> String {
@@ -616,6 +638,12 @@ final class AgentStore: ObservableObject {
         /// tmux 패널만 남고 에이전트는 끝났으면 false
         var hasAgentProcess: Bool
         var isActive: Bool
+        var lastOutput: Date? = nil
+        /// Claude Code의 sessions/<pid>.json
+        var sessionID: String? = nil
+        var account: String? = nil
+        var agentStatus: String? = nil
+        var statusSince: Date? = nil
         var screen: TerminalScreen?
         var analysis: ScreenAnalysis?
     }
@@ -633,6 +661,9 @@ final class AgentStore: ObservableObject {
         let now = Date()
         let processes = AgentScanner.scan().filter { $0.tty != nil }
         let panes = tmuxServerRunning ? ((try? TmuxBridge.shared.panes()) ?? []) : []
+        let claudeDirs = processes.contains { $0.kind == .claude }
+            ? AgentUsageReader.claudeConfigDirs(home: FileManager.default.homeDirectoryForCurrentUser, environment: ProcessInfo.processInfo.environment)
+            : []
         var items: [PollItem] = []
 
         for process in processes {
@@ -651,10 +682,13 @@ final class AgentStore: ObservableObject {
                 location = .other(tty: tty, app: process.hostApp)
             }
             let lastOutput = AgentScanner.lastOutput(tty: tty)
+            let live = process.kind == .claude ? ClaudeStatusLine.liveSession(pid: process.pid, configDirs: claudeDirs) : nil
             items.append(PollItem(
                 id: id, kind: process.kind, pid: process.pid, location: location, cwd: process.cwd,
                 startedAt: process.startedAt, isLaunchedByCheoma: pane?.sessionName.hasPrefix(TmuxBridge.sessionPrefix) ?? false,
-                hasAgentProcess: true, isActive: lastOutput.map { now.timeIntervalSince($0) < activeWindow } ?? false))
+                hasAgentProcess: true, isActive: lastOutput.map { now.timeIntervalSince($0) < activeWindow } ?? false,
+                lastOutput: lastOutput, sessionID: live?.sessionID, account: live?.account,
+                agentStatus: live?.status, statusSince: live?.statusSince))
         }
         // Cheoma가 띄운 패널은 에이전트가 끝나도 남긴다 (마지막 화면을 볼 수 있게)
         for pane in panes where pane.sessionName.hasPrefix(TmuxBridge.sessionPrefix) && !items.contains(where: { $0.location.tty == pane.tty }) {
@@ -779,6 +813,12 @@ extension AgentStore {
                 screen: TerminalScreen(text: piScreen, capturedAt: now),
                 lastEvent: nil, isLaunchedByCheoma: true),
         ]
+        store.sessions = store.sessions.map { session in
+            var session = session
+            session.lastActivity = session.stateSince
+            if session.kind == .claude { session.account = ".claude-account2" }
+            return session
+        }.sorted(by: order)
         store.selectedID = "terminal:/dev/ttys004"
         store.recordedSessions = [
             RecordedSession(id: "c9db0d62", kind: .claude, cwd: "/Users/me/Documents/MJ-couple", title: "Couple app onboarding flow",
@@ -792,14 +832,20 @@ extension AgentStore {
                               plan: "plus", updatedAt: now.addingTimeInterval(-600)),
             claude: [
                 ClaudeUsage(account: ".claude", todayCostUSD: 3.2, todayTokens: 1_240_000, blockCostUSD: 1.1,
-                            blockStartedAt: now.addingTimeInterval(-2 * 3_600), blockEndsAt: now.addingTimeInterval(3 * 3_600), updatedAt: now),
+                            blockStartedAt: now.addingTimeInterval(-2 * 3_600), blockEndsAt: now.addingTimeInterval(3 * 3_600),
+                            limits: [UsageWindow(usedPercent: 12, windowMinutes: 300, resetsAt: now.addingTimeInterval(2 * 3_600)),
+                                     UsageWindow(usedPercent: 68, windowMinutes: 10_080, resetsAt: now.addingTimeInterval(3 * 86_400))],
+                            updatedAt: now, limitsUpdatedAt: now),
                 ClaudeUsage(account: ".claude-account2", todayCostUSD: 12.4, todayTokens: 5_800_000, blockCostUSD: 4.7,
-                            blockStartedAt: now.addingTimeInterval(-3_600), blockEndsAt: now.addingTimeInterval(4 * 3_600), updatedAt: now),
+                            blockStartedAt: now.addingTimeInterval(-3_600), blockEndsAt: now.addingTimeInterval(4 * 3_600),
+                            limits: [UsageWindow(usedPercent: 91, windowMinutes: 300, resetsAt: now.addingTimeInterval(40 * 60)),
+                                     UsageWindow(usedPercent: 35, windowMinutes: 10_080, resetsAt: now.addingTimeInterval(5 * 86_400))],
+                            updatedAt: now, limitsUpdatedAt: now),
             ],
             recentSessions: store.recordedSessions)
         store.hookStatus = HookInstaller.Status(
-            claude: [HookInstaller.ClaudeTarget(configDir: URL(fileURLWithPath: "/Users/me/.claude"), isInstalled: true),
-                     HookInstaller.ClaudeTarget(configDir: URL(fileURLWithPath: "/Users/me/.claude-account2"), isInstalled: false)],
+            claude: [HookInstaller.ClaudeTarget(configDir: URL(fileURLWithPath: "/Users/me/.claude"), hooks: true, statusLine: .installed),
+                     HookInstaller.ClaudeTarget(configDir: URL(fileURLWithPath: "/Users/me/.claude-account2"), hooks: false, statusLine: .notInstalled)],
             codex: .occupied("notify-send"))
         store.terminalPermission = .granted
         store.isTmuxAvailable = true

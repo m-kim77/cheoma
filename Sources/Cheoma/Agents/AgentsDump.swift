@@ -9,6 +9,10 @@ enum AgentsDump {
         if arguments.contains("--selftest") {
             exit(AgentsSelfTest.run() ? 0 : 1)
         }
+        if arguments.contains("--store") {
+            MainActor.assumeIsolated { dumpStore() }
+            return
+        }
         let showCapture = arguments.contains("--capture")
 
         let start = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
@@ -64,6 +68,24 @@ enum AgentsDump {
             } catch {
                 print("  오류: \(error.localizedDescription)")
             }
+        }
+    }
+
+    /// `--agents --store`: 앱과 같은 AgentStore를 몇 초 돌려서 에이전트 탭 왼쪽 목록에 나올 내용을 찍는다
+    @MainActor
+    private static func dumpStore() {
+        let store = AgentStore()
+        store.isVisible = true
+        store.start()
+        RunLoop.main.run(until: Date().addingTimeInterval(4))
+        print("세션 \(store.sessions.count)개 (목록 순서대로)")
+        for session in store.sessions {
+            print("  \(session.id)  \(session.kind.rawValue)  \(session.account ?? "")  \(session.state.title)  \(session.projectName)"
+                  + "  · \(session.title ?? session.analysis?.summary ?? "-")")
+        }
+        print("최근 기록 \(store.recordedSessions.count)개")
+        for record in store.recordedSessions {
+            print("  \(record.kind.rawValue)  \(record.cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "-")  · \(record.title ?? "-")  \(record.id.prefix(8))")
         }
     }
 

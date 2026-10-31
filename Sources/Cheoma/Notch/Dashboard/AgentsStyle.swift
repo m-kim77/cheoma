@@ -33,27 +33,6 @@ enum AgentsStyle {
         }
     }
 
-    /// 목록 순서: 사용자가 봐야 하는 것 먼저
-    static func rank(_ state: AgentState) -> Int {
-        switch state {
-        case .needsChoice: 0
-        case .needsInput: 1
-        case .working: 2
-        case .unknown: 3
-        case .exited: 4
-        }
-    }
-
-    static func sorted(_ sessions: [AgentSession]) -> [AgentSession] {
-        sessions.sorted { a, b in
-            let (x, y) = (rank(a.state), rank(b.state))
-            if x != y { return x < y }
-            // 같은 상태끼리는 오래 기다린 것 먼저, 같으면 ID로 고정해서 줄이 뒤섞이지 않게 한다
-            if a.state.needsAttention, a.stateSince != b.stateSince { return a.stateSince < b.stateSince }
-            return a.id < b.id
-        }
-    }
-
     /// "방금", "3분", "2시간", "1일"
     static func elapsed(since date: Date, now: Date = Date()) -> String {
         let seconds = max(now.timeIntervalSince(date), 0)

@@ -75,6 +75,17 @@ enum PreviewRenderer {
 
         renderAgents(model: model, stats: stats, fans: fans, agents: agents, folder: folder)
         checkOverflow(model: model, stats: stats, fans: fans, agents: agents)
+        // `--live`: 이 맥의 진짜 세션 · 사용량으로 에이전트 탭을 그린다 (개인 정보가 보이니 문서 그림으로 쓰지 않는다)
+        if CommandLine.arguments.contains("--live") {
+            let live = AgentStore()
+            live.isVisible = true
+            live.start()
+            RunLoop.main.run(until: Date().addingTimeInterval(4))
+            AgentReplyField.drawsPlaceholderOnly = true
+            model.previewOpen(.agents)
+            render(NotchView(model: model, stats: stats, fans: fans, agents: live), to: folder.appendingPathComponent("agents-live.png"))
+            AgentReplyField.drawsPlaceholderOnly = false
+        }
     }
 
     /// 에이전트 탭의 여러 모습: tmux 세션(특수 키), 세션 없음, 새 에이전트 고르기, 연결 설정. 두 테마 모두

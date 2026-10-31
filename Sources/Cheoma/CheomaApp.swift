@@ -8,6 +8,10 @@ enum CheomaApp {
             NotifyCommand.send(arguments: Array(CommandLine.arguments[(index + 1)...]))
             return
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--agent-statusline") {
+            ClaudeStatusLine.run(arguments: Array(CommandLine.arguments[(index + 1)...]))
+            return
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--agent-event") {
             AgentHooks.send(arguments: Array(CommandLine.arguments[(index + 1)...]))
             return
