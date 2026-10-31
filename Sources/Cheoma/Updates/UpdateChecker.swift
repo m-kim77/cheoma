@@ -62,7 +62,8 @@ struct AppRelease: Decodable, Equatable, Sendable {
         return self
     }
 
-    /// 설정 창에 보여 줄 바뀐 내용 앞부분. 릴리스 설명은 영어 다음 `---` 아래에 한국어가 오므로, 한국어 부분이 있으면 그쪽을 쓴다.
+    /// 설정 창에 보여 줄 바뀐 내용 앞부분. 릴리스 설명은 영어 다음 `---` 아래에 한국어가 오므로, 한글이 가장 많은 부분을 쓴다
+    /// (영어 부분에도 "다시 설치" 같은 화면 이름이 섞여 있다). 한글이 없으면 맨 앞 부분.
     /// 마크다운 제목(###)은 떼고 목록(-)은 •로 바꾼다. 굵게 · 링크 같은 줄 안의 표시는 화면에서 그린다
     func summary(maxLines: Int = 8) -> String {
         let sections = (body ?? "")
@@ -70,7 +71,9 @@ struct AppRelease: Decodable, Equatable, Sendable {
             .components(separatedBy: "\n---")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        let section = sections.first { $0.unicodeScalars.contains { (0xAC00...0xD7A3).contains($0.value) } } ?? sections.first ?? ""
+        func hangul(_ text: String) -> Int { text.unicodeScalars.filter { (0xAC00...0xD7A3).contains($0.value) }.count }
+        let korean = sections.max { hangul($0) < hangul($1) }
+        let section = korean.flatMap { hangul($0) > 0 ? $0 : nil } ?? sections.first ?? ""
         let lines = section.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         return lines.prefix(maxLines).map { line in
             if line.hasPrefix("#") { return String(line.drop { $0 == "#" }).trimmingCharacters(in: .whitespaces) }
@@ -102,12 +105,16 @@ final class UpdateChecker: ObservableObject {
 
     private let defaults: UserDefaults
     private let fetch: @Sendable () async throws -> Data
+    /// 오류를 남기는 곳 (테스트에서는 사용자 로그 파일에 쓰지 않게 바꾼다)
+    private let log: (String) -> Void
     private var timer: Timer?
 
     init(current: AppVersion? = AppVersion.bundle, defaults: UserDefaults = .standard,
+         log: @escaping (String) -> Void = AppLog.write,
          fetch: @escaping @Sendable () async throws -> Data = { try await UpdateChecker.download() }) {
         self.current = current
         self.defaults = defaults
+        self.log = log
         self.fetch = fetch
         lastChecked = defaults.object(forKey: Self.lastCheckedKey) as? Date
     }
@@ -118,7 +125,7 @@ final class UpdateChecker: ObservableObject {
 
     func start() {
         guard current != nil else {
-            AppLog.write("새 버전 확인: 버전 정보가 없는 개발 빌드라 확인하지 않음")
+            log("새 버전 확인: 버전 정보가 없는 개발 빌드라 확인하지 않음")
             return
         }
         Task { [weak self] in
@@ -164,7 +171,7 @@ final class UpdateChecker: ObservableObject {
             if !userInitiated { onAlert?(Self.alert(for: newer)) }
         } catch {
             lastCheckFailed = true
-            AppLog.write("새 버전 확인 실패: \(error.localizedDescription)")
+            log("새 버전 확인 실패: \(error.localizedDescription)")
         }
     }
 
@@ -195,7 +202,8 @@ final class UpdateChecker: ObservableObject {
     #if DEBUG
     /// 미리보기 렌더링용: 새 버전이 있는 것처럼
     static func preview(available: AppRelease?) -> UpdateChecker {
-        let checker = UpdateChecker(current: AppVersion("0.1.0"), defaults: UserDefaults(suiteName: "cheoma.preview") ?? .standard) {
+        let checker = UpdateChecker(current: AppVersion("0.1.0"), defaults: UserDefaults(suiteName: "cheoma.preview") ?? .standard,
+                                    log: { _ in }) {
             throw URLError(.notConnectedToInternet)
         }
         checker.available = available

@@ -66,7 +66,7 @@ final class AppReleaseTests: XCTestCase {
     }
 
     func testSummaryPrefersKoreanSection() throws {
-        let body = "Agents in the notch.\n\n### What's in it\n\n- Agents tab\n\n---\n\n노치에서 에이전트를 봅니다.\n\n### 들어 있는 기능\n\n- **에이전트 탭**\n* 새 버전 알림\n\n---\n\nSHA-256: abc"
+        let body = "Agents in the notch.\n\n### What's in it\n\n- Agents tab\n- Click **다시 설치** (Reinstall)\n\n---\n\n노치에서 에이전트를 봅니다.\n\n### 들어 있는 기능\n\n- **에이전트 탭**\n* 새 버전 알림\n\n---\n\nSHA-256: abc"
         let release = try AppRelease.decode(Self.json(body: body))
         XCTAssertEqual(release.summary(), "노치에서 에이전트를 봅니다.\n들어 있는 기능\n• **에이전트 탭**\n• 새 버전 알림")
         XCTAssertEqual(release.summary(maxLines: 1), "노치에서 에이전트를 봅니다.")
@@ -96,8 +96,10 @@ final class UpdateCheckerTests: XCTestCase {
         var fails = false
     }
 
+    private var logged: [String] = []
+
     private func checker(current: String = "0.1.0", server: FakeServer) -> UpdateChecker {
-        UpdateChecker(current: AppVersion(current), defaults: defaults) {
+        UpdateChecker(current: AppVersion(current), defaults: defaults, log: { [weak self] in self?.logged.append($0) }) {
             if server.fails { throw URLError(.notConnectedToInternet) }
             return AppReleaseTests.json(tag: server.tag)
         }
@@ -160,6 +162,7 @@ final class UpdateCheckerTests: XCTestCase {
         await updates.check()
         XCTAssertEqual(alerts, 0)
         XCTAssertTrue(updates.lastCheckFailed)
+        XCTAssertEqual(logged.count, 1)
         // 실패하면 마지막 확인 시각을 남기지 않아서 다음 차례에 다시 확인한다
         XCTAssertNil(updates.lastChecked)
 
@@ -170,7 +173,7 @@ final class UpdateCheckerTests: XCTestCase {
     }
 
     func testDevelopmentBuildNeverChecks() async {
-        let updates = UpdateChecker(current: nil, defaults: defaults) {
+        let updates = UpdateChecker(current: nil, defaults: defaults, log: { _ in }) {
             XCTFail("개발 빌드에서 GitHub에 접속함")
             return Data()
         }
