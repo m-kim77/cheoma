@@ -92,6 +92,7 @@ final class StatsStore: ObservableObject {
         guard let data = try? Data(contentsOf: Self.historyURL),
               var saved = try? PropertyListDecoder().decode(StatsHistory.self, from: data) else { return }
         saved.prune(now: Date().timeIntervalSinceReferenceDate)
+        saved.discardImpossibleValues()
         history = saved
     }
 

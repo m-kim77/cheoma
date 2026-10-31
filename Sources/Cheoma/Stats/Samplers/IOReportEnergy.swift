@@ -25,7 +25,9 @@ final class IOReportEnergy {
     private let unitLabel: GetString
     private let subscription: OpaquePointer
     private let channels: CFMutableDictionary
-    private var previous: (samples: CFDictionary, time: Date)?
+    private var previous: (samples: CFDictionary, time: TimeInterval)?
+    /// 이보다 오래 못 쟀으면(잠자기 등) 그 사이 평균이 0에 가까워 기록을 끌어내리므로 버리고 기준만 잡는다
+    private static let maximumInterval: TimeInterval = 30
 
     private enum Kind { case cpu, gpu, ane, anePart, dram, display }
     /// 채널 이름 → 종류와 줄 단위 (이름은 바뀌지 않으므로 처음 본 뒤로는 다시 해석하지 않는다)
@@ -75,13 +77,13 @@ final class IOReportEnergy {
     /// 직전 샘플과의 에너지 차이 / 시간 = 평균 전력(W)
     func sample() -> Reading? {
         guard let current = createSamples(subscription, channels, nil)?.takeRetainedValue() else { return nil }
-        let now = Date()
+        let now = MonotonicClock.now
         defer { previous = (current, now) }
-        guard let previous,
+        guard let previous else { return nil }
+        let dt = now - previous.time
+        guard dt > 0, dt <= Self.maximumInterval,
               let delta = createDelta(previous.samples, current, nil)?.takeRetainedValue(),
               let items = (delta as NSDictionary)["IOReportChannels"] as? [CFDictionary] else { return nil }
-        let dt = now.timeIntervalSince(previous.time)
-        guard dt > 0 else { return nil }
 
         var joules = Reading()
         var aneTotal: Double?
