@@ -66,6 +66,14 @@ final class FanController: ObservableObject {
     var isStopped: Bool { mode == .fixed && fixedRPMs.allSatisfy { $0 == 0 } }
 
     private var connection: NSXPCConnection?
+    /// 앱이 스스로 끊은 연결들. 그 뒤에 오는 오류는 "다시 설치" 안내가 아니라 무시한다
+    private var retiredConnections: [NSXPCConnection] = []
+    /// apply할 때마다 올린다. 그 전에 보낸 keepAlive·설정의 늦은 답이 새 설정을 뒤집지 못하게
+    private var applyCount = 0
+    /// 최근 30초 동안 걸었던 목표들. 온도별 모드처럼 목표가 계속 바뀌면 팬이 앞 목표를 따라가는 중일 수 있다
+    private var recentTargets: [(time: Date, rpms: [Double])] = []
+    /// 첫 확인을 잡은 시각. 목표가 계속 바뀌어도 이보다 오래 미루지는 않는다
+    private var verifyStarted: Date?
     private var keepAliveTimer: Timer?
     private var verifyWork: DispatchWorkItem?
     /// appliedRPMs를 마지막으로 바꾼 시각 (팬이 목표에 닿을 시간을 줬는지 볼 때)
@@ -294,17 +302,24 @@ final class FanController: ObservableObject {
     }
 
     private func apply(_ rpms: [Double]?) {
+        applyCount += 1
+        let count = applyCount
         appliedRPMs = rpms
         appliedAt = Date()
         updateKeepAlive()
-        if rpms == nil {
+        if let rpms {
+            recentTargets.removeAll { appliedAt.timeIntervalSince($0.time) > 30 }
+            recentTargets.append((appliedAt, rpms))
+        } else {
             verifyWork?.cancel()
             verifyWork = nil
+            verifyStarted = nil
+            recentTargets = []
         }
-        let proxy = remoteProxy { [weak self] error in self?.connectionFailed(error) }
+        let proxy = remoteProxy { [weak self] error, failed in self?.connectionFailed(error, on: failed) }
         proxy?.setFanSpeeds(rpms?.map { NSNumber(value: $0) }) { [weak self] error in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, count == self.applyCount else { return }
                 if let error {
                     self.fail(error)
                 } else if rpms != nil {
@@ -315,7 +330,9 @@ final class FanController: ObservableObject {
     }
 
     /// 도우미가 재시작하는 중(연결 중단)이면 다음 측정 때 다시 적용하고, 아예 연결할 수 없을 때만 실패로 본다
-    private func connectionFailed(_ error: Error) {
+    private func connectionFailed(_ error: Error, on failed: NSXPCConnection?) {
+        // 앱이 스스로 끊은 연결(재설치·제거·중단 뒤 정리)에서 온 오류는 무시한다
+        if let failed, retiredConnections.contains(where: { $0 === failed }) { return }
         if (error as NSError).code == NSXPCConnectionInterrupted {
             AppLog.write("팬: 도우미 연결이 잠깐 끊김, 다시 적용함")
             appliedRPMs = nil
@@ -352,16 +369,19 @@ final class FanController: ObservableObject {
     /// 확인이 끝없이 미뤄지지 않게, 이미 잡힌 확인은 그대로 두고 그때 걸려 있는 목표로 확인한다
     private func scheduleVerification(after delay: TimeInterval = verificationDelay) {
         guard verifyWork == nil else { return }
+        if verifyStarted == nil { verifyStarted = Date() }
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.verifyWork = nil
                 guard let targets = self.appliedRPMs else { return }
-                // 목표가 방금 바뀌었으면 팬이 따라올 시간을 더 준다
+                // 목표가 방금 바뀌었으면 팬이 따라올 시간을 더 준다. 다만 목표가 계속 바뀌어도 첫 확인부터 24초 넘게는 미루지 않는다
                 let waited = Date().timeIntervalSince(self.appliedAt)
-                if waited < Self.verificationDelay {
+                let sinceStart = Date().timeIntervalSince(self.verifyStarted ?? self.appliedAt)
+                if waited < Self.verificationDelay, sinceStart < Self.verificationDelay * 3 {
                     self.scheduleVerification(after: Self.verificationDelay - waited)
                 } else {
+                    self.verifyStarted = nil
                     self.verify(targets)
                 }
             }
@@ -370,21 +390,26 @@ final class FanController: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
+    /// 팬 하나라도 최근 목표(지금 목표나 앞서 걸었던 목표) 근처에 있으면 수동 제어가 먹힌 것으로 본다.
+    /// 하나도 없으면 이 맥은 수동 제어를 받지 않는 것이라 자동으로 되돌린다
     private func verify(_ targets: [Double]) {
         guard let smc, appliedRPMs == targets else { return }
+        let candidates = [targets] + recentTargets.map(\.rpms)
         var checked = 0
         var reached = 0
         for (index, limits) in fanLimits.enumerated() {
             guard let rpm = smc.float("F\(index)Ac").map(Double.init) else { continue }
-            let target = targets[min(index, targets.count - 1)]
             checked += 1
-            if target <= 0 {
-                // 멈춤: 거의 멈췄으면 된 것
-                if rpm < limits.lowerBound / 2 { reached += 1 }
-            } else {
+            let near = candidates.contains { candidate in
+                let target = candidate[min(index, candidate.count - 1)]
+                if target <= 0 {
+                    // 멈춤: 거의 멈췄으면 된 것
+                    return rpm < limits.lowerBound / 2
+                }
                 let expected = min(max(target, limits.lowerBound), limits.upperBound)
-                if abs(rpm - expected) <= (limits.upperBound - limits.lowerBound) * 0.25 { reached += 1 }
+                return abs(rpm - expected) <= (limits.upperBound - limits.lowerBound) * 0.25
             }
+            if near { reached += 1 }
         }
         guard checked > 0, reached == 0 else { return }
         let stopping = targets.allSatisfy { $0 <= 0 }
@@ -400,7 +425,7 @@ final class FanController: ObservableObject {
 
     // MARK: - 도우미 연결
 
-    private func remoteProxy(onError: @escaping (Error) -> Void) -> FanHelperProtocol? {
+    private func remoteProxy(onError: @escaping (Error, NSXPCConnection?) -> Void) -> FanHelperProtocol? {
         if connection == nil {
             let connection = NSXPCConnection(machServiceName: FanHelper.machServiceName, options: .privileged)
             connection.remoteObjectInterface = FanHelper.makeInterface()
@@ -414,18 +439,27 @@ final class FanController: ObservableObject {
             connection.resume()
             self.connection = connection
         }
-        let proxy = connection?.remoteObjectProxyWithErrorHandler { error in
-            Task { @MainActor in onError(error) }
+        let current = connection
+        let proxy = current?.remoteObjectProxyWithErrorHandler { [weak current] error in
+            Task { @MainActor in onError(error, current) }
         }
         return proxy as? FanHelperProtocol
+    }
+
+    /// 앱이 일부러 연결을 끊는다. 그 연결로 보낸 메시지의 오류는 connectionFailed가 무시한다
+    private func retireConnection() {
+        guard let old = connection else { return }
+        connection = nil
+        retiredConnections.append(old)
+        if retiredConnections.count > 4 { retiredConnections.removeFirst() }
+        old.invalidate()
     }
 
     /// 도우미가 재시작했거나(중단) 연결이 끝났을 때(무효). 도우미는 연결이 끊기면 스스로 자동으로 되돌리므로
     /// 다음 온도 측정 때 지금 모드를 다시 적용한다. 중단된 연결은 XPC가 다시 이어 주지만 깔끔하게 새로 만든다
     private func connectionLost(_ lost: NSXPCConnection?, invalidated: Bool) {
         guard let lost, lost === connection else { return }
-        if !invalidated { lost.invalidate() }
-        connection = nil
+        if invalidated { connection = nil } else { retireConnection() }
         appliedRPMs = nil
         updateKeepAlive()
     }
@@ -433,13 +467,16 @@ final class FanController: ObservableObject {
     /// 수동 모드를 유지하라고 알리고, 도우미가 그사이 혼자 자동으로 되돌렸으면(응답 없음 · 잠자기 · 온도 한계) 화면과 설정을 맞춘다
     private func sendKeepAlive() {
         guard appliedRPMs != nil else { return }
-        remoteProxy { [weak self] error in self?.connectionFailed(error) }?.keepAlive { [weak self] isManual, overheated in
-            Task { @MainActor in self?.helperReported(isManual: isManual, overheated: overheated) }
+        let count = applyCount
+        let proxy = remoteProxy { [weak self] error, failed in self?.connectionFailed(error, on: failed) }
+        proxy?.keepAlive { [weak self] isManual, overheated in
+            Task { @MainActor in self?.helperReported(isManual: isManual, overheated: overheated, applyCount: count) }
         }
     }
 
-    private func helperReported(isManual: Bool, overheated: Bool) {
-        guard !isManual, appliedRPMs != nil else { return }
+    private func helperReported(isManual: Bool, overheated: Bool, applyCount count: Int) {
+        // 그사이 새 설정을 보냈으면 이 답은 그 전 상태라 무시한다 (새 설정을 받은 도우미는 다시 수동이다)
+        guard !isManual, appliedRPMs != nil, count == applyCount else { return }
         if overheated {
             // 같은 설정을 바로 다시 걸면 또 한계에 닿으니 자동으로 두고 알린다
             fail("CPU가 \(Int(FanHelper.thermalLimit))°C를 넘어서 (멈춤이면 \(Int(FanHelper.stoppedThermalLimit))°C) 팬을 자동으로 되돌렸어요.")
@@ -473,8 +510,19 @@ final class FanController: ObservableObject {
             report("도우미 파일(CheomaFanHelper)을 찾지 못했어요. 앱과 같이 빌드해야 해요.")
             return
         }
-        guard let client = Self.clientRequirement, let helperRequirement = CodeSignature.designatedRequirement(ofFile: source) else {
-            report("앱이나 도우미의 코드 서명을 읽지 못했어요. 앱을 다시 내려받아 보세요.")
+        guard let client = Self.clientRequirement else {
+            report("앱의 코드 서명을 읽지 못했어요. 앱을 다시 내려받아 보세요.")
+            return
+        }
+        // 도우미의 서명은 번들 안 파일에서 읽으므로, 먼저 번들 전체가 지금 실행 중인 앱의 서명 그대로인지 확인한다.
+        // 같은 사용자의 다른 프로세스가 번들 안 도우미만 바꿔 뒀다면 여기서 걸린다 (swift build로 띄운 개발 실행은 번들이 없어서 건너뛴다)
+        if Bundle.main.bundleIdentifier != nil,
+           !CodeSignature.bundle(at: Bundle.main.bundleURL, isIntactAndSatisfies: client) {
+            report("앱 파일이 서명과 달라요. 앱을 다시 내려받아 설치한 뒤 도우미를 설치하세요.")
+            return
+        }
+        guard let helperRequirement = CodeSignature.designatedRequirement(ofFile: source) else {
+            report("도우미의 코드 서명을 읽지 못했어요. 앱을 다시 내려받아 보세요.")
             return
         }
         let plist: [String: Any] = [
@@ -482,6 +530,8 @@ final class FanController: ObservableObject {
             "ProgramArguments": [FanHelper.installedBinaryPath, "--allow-requirement", client,
                                  "--helper-version", String(FanHelper.version)],
             "MachServices": [FanHelper.machServiceName: true],
+            // 도우미가 죽으면 launchd가 다시 띄워서, 시작할 때 팬을 자동으로 돌려놓게 한다
+            "KeepAlive": ["Crashed": true],
             "StandardErrorPath": "/var/log/\(FanHelper.label).log",
         ]
         guard let plistData = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) else {
@@ -507,8 +557,7 @@ final class FanController: ObservableObject {
                                           plist: plistData)
 
         // 예전 도우미와 연결돼 있었다면 끊고 새로 연결한다
-        connection?.invalidate()
-        connection = nil
+        retireConnection()
         appliedRPMs = nil
         updateKeepAlive()
         helperState = .working
@@ -551,8 +600,7 @@ final class FanController: ObservableObject {
 
     func uninstallHelper() {
         if mode != .automatic { setMode(.automatic) }
-        connection?.invalidate()
-        connection = nil
+        retireConnection()
         let script = [
             "launchctl bootout system/\(FanHelper.label) 2>/dev/null || true",
             "rm -f \(Self.quoted(FanHelper.launchDaemonPlistPath)) \(Self.quoted(FanHelper.installedBinaryPath))",

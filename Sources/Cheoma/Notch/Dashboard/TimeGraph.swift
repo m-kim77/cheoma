@@ -293,17 +293,27 @@ struct TimeGraph: View {
 @MainActor
 final class GraphClock: ObservableObject {
     @Published private(set) var now = Date()
-    /// 그래프가 1pt 움직이는 시간. 그래프가 자기 폭으로 계산해서 알려 준다 (바꿔도 다시 그리지 않게 @Published가 아니다)
-    var interval: TimeInterval = 1
+    /// 그래프가 1pt 움직이는 시간. 그래프가 자기 폭으로 계산해서 알려 준다.
+    /// 구간을 바꾸면(24시간 → 1분) 바로 지금 시각으로 다시 그린다
+    var interval: TimeInterval = 1 {
+        didSet { if interval != oldValue { now = Date() } }
+    }
 
     /// 초당 30번보다 자주는 그리지 않는다
     private static let minimumInterval: TimeInterval = 1.0 / 30
+    /// 긴 간격(24시간 구간은 약 5분)도 한 번에 다 자지 않고 이만큼씩 깨어 간격이 바뀌었는지 본다
+    private static let longestSleep: TimeInterval = 1
 
     func run() async {
         now = Date()
         while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(max(interval, Self.minimumInterval)))
-            now = Date()
+            let due = now.addingTimeInterval(max(interval, Self.minimumInterval))
+            let wait = due.timeIntervalSinceNow
+            if wait > 0 {
+                try? await Task.sleep(for: .seconds(min(wait, Self.longestSleep)))
+            } else {
+                now = Date()
+            }
         }
     }
 }

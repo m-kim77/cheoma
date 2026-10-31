@@ -65,7 +65,8 @@ final class StatusBarController: NSObject {
     private func restoreSavedHiding(attempt: Int = 0) {
         guard UserDefaults.standard.bool(forKey: Self.hidingDefaultsKey), !isHiding else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self else { return }
+            // 그사이 사용자가 숨기기를 직접 바꿨으면 그대로 둔다
+            guard let self, UserDefaults.standard.bool(forKey: Self.hidingDefaultsKey), !self.isHiding else { return }
             if self.hasPositions {
                 if self.separatorIsLeftOfToggle {
                     self.isHiding = true

@@ -33,6 +33,17 @@ public enum CodeSignature {
         return SecCodeCheckValidity(code, [], requirement) == errSecSuccess
     }
 
+    /// 디스크의 .app 번들이 서명된 그대로인지 (안에 든 실행 파일들까지), 그리고 요구사항을 만족하는지.
+    /// 번들 안의 도우미 파일만 바꿔치기하면 번들 서명이 깨져서 여기서 걸린다
+    public static func bundle(at url: URL, isIntactAndSatisfies requirementText: String) -> Bool {
+        var staticCode: SecStaticCode?
+        var requirement: SecRequirement?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &staticCode) == errSecSuccess, let staticCode,
+              SecRequirementCreateWithString(requirementText as CFString, [], &requirement) == errSecSuccess else { return false }
+        let flags = SecCSFlags(rawValue: kSecCSCheckNestedCode | kSecCSStrictValidate | kSecCSCheckAllArchitectures)
+        return SecStaticCodeCheckValidity(staticCode, flags, requirement) == errSecSuccess
+    }
+
     private static func designatedRequirement(of code: SecStaticCode) -> String? {
         var requirement: SecRequirement?
         guard SecCodeCopyDesignatedRequirement(code, [], &requirement) == errSecSuccess, let requirement else { return nil }

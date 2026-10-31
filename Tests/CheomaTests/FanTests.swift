@@ -107,6 +107,13 @@ final class CodeSignatureTests: XCTestCase {
         XCTAssertTrue(CodeSignature.process(getpid(), satisfies: requirement))
     }
 
+    func testSignedBundleIsIntact() throws {
+        let app = URL(fileURLWithPath: "/System/Applications/Calculator.app")
+        let requirement = try XCTUnwrap(CodeSignature.designatedRequirement(ofFile: app))
+        XCTAssertTrue(CodeSignature.bundle(at: app, isIntactAndSatisfies: requirement))
+        XCTAssertFalse(CodeSignature.bundle(at: app, isIntactAndSatisfies: #"identifier "io.example.not-this-one""#))
+    }
+
     func testOtherRequirementIsRejected() {
         XCTAssertFalse(CodeSignature.process(getpid(), satisfies: #"identifier "io.example.not-this-one""#))
         XCTAssertFalse(CodeSignature.process(getpid(), satisfies: "not a requirement"))

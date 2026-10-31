@@ -84,9 +84,8 @@ struct TimeSeries: Codable {
     /// 그래프 탭이 다시 그릴 때마다 부르니 배열을 만들지 않고 한 번 훑는다
     func summary(since start: TimeInterval) -> (average: Double, maximum: Double)? {
         let fineStart = fine.first?.time ?? .infinity
-        // 1분 평균 점 하나는 원본 점 여러 개 몫이다. 원본 간격(1~2초)으로 나눠 무게를 맞춰야
-        // 24시간 평균이 최근 1시간 쪽으로 쏠리지 않는다
-        let fineSpacing = fine.count > 1 ? max((fine[fine.count - 1].time - fine[0].time) / Double(fine.count - 1), 1) : 1
+        // 시간으로 무게를 준다: 1분 평균 점은 60초, 원본 점은 다음 점까지의 간격(1~2초, 끊긴 곳은 최대 10초).
+        // 점 개수로 평균하면 24시간 평균이 원본 점이 많은 최근 1시간 쪽으로 쏠린다
         var sum = 0.0
         var weight = 0.0
         var maximum = -Double.infinity
@@ -97,10 +96,15 @@ struct TimeSeries: Codable {
         }
         if start < fineStart {
             for point in coarse[Self.indexBefore(start, in: coarse)...] where point.time >= start && point.time < fineStart {
-                add(point, weight: Self.coarseStep / fineSpacing)
+                add(point, weight: Self.coarseStep)
             }
         }
-        for point in fine[Self.indexBefore(start, in: fine)...] where point.time >= start { add(point, weight: 1) }
+        let maximumGap: TimeInterval = 10
+        for index in fine.indices[Self.indexBefore(start, in: fine)...] where fine[index].time >= start {
+            let gap = index + 1 < fine.count ? fine[index + 1].time - fine[index].time
+                : index > 0 ? fine[index].time - fine[index - 1].time : 1
+            add(fine[index], weight: min(max(gap, 0), maximumGap))
+        }
         guard weight > 0 else { return nil }
         return (sum / weight, maximum)
     }

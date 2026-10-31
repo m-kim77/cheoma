@@ -129,3 +129,34 @@ final class FormatTests: XCTestCase {
         XCTAssertEqual(Format.processCPU(0.05), "5.0%")
     }
 }
+
+final class SummaryGapTests: XCTestCase {
+    /// 원본 점은 간격만큼 무게를 받는다: 앱이 꺼져 있던 구간(10초 넘는 틈)이 평균을 끌고 가지 않는다
+    func testRawPointsWeighByGap() throws {
+        var series = TimeSeries()
+        let start = 1_000_000.0
+        for second in 0..<60 { series.append(0, at: start + Double(second)) }          // 1초 간격으로 0
+        for step in 0..<30 { series.append(100, at: start + 600 + Double(step) * 2) }  // 9분 쉬고 2초 간격으로 100
+        let summary = try XCTUnwrap(series.summary(since: start))
+        // 0: 59초 + 틈 10초(최대), 100: 60초 → 약 46
+        XCTAssertEqual(summary.average, 100 * 60 / 129, accuracy: 3)
+    }
+}
+
+@MainActor
+final class GraphClockTests: XCTestCase {
+    /// 24시간 구간(약 5분 간격)에서 1분 구간으로 바꾸면 바로 다시 흐르기 시작해야 한다
+    func testShorterIntervalTakesEffectQuickly() async throws {
+        let clock = GraphClock()
+        clock.interval = 290
+        let task = Task { await clock.run() }
+        try await Task.sleep(for: .milliseconds(100))
+        let switched = Date()
+        clock.interval = 0.2
+        XCTAssertGreaterThanOrEqual(clock.now, switched)   // 바꾸는 순간 지금 시각으로
+        let afterSwitch = clock.now
+        try await Task.sleep(for: .milliseconds(1_600))
+        XCTAssertGreaterThan(clock.now, afterSwitch)        // 그 뒤로도 흐른다
+        task.cancel()
+    }
+}

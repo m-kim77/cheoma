@@ -3,7 +3,7 @@
 2026-10-30 밤 점검(코드 리뷰, 빌드 경고, 실행 중인 앱 측정, 로그·크래시 확인)에서 나온 목록 가운데 아직 남은 것이다.
 고치면 이 문서에서 지우고 [PROGRESS.md](PROGRESS.md) 작업 기록에 남긴다. 2026-10-31에 "꼭 고칠 것" 여섯 개와 "고치면 좋은 것"은 모두 고쳤다 (작업 기록 10/31).
 
-전체 상태: 크래시 0건, 메모리 누수 없음. 대시보드를 닫았을 때 CPU 약 0.3%, 그래프 탭 1분 4.7%. debug·release 빌드 warning 0건, `-strict-concurrency=complete`도 0건. 단위 테스트 25개.
+전체 상태: 크래시 0건, 메모리 누수 없음. 대시보드를 닫았을 때 CPU 약 0.3%, 그래프 탭 1분 4.7%. debug·release 빌드 warning 0건, `-strict-concurrency=complete`도 0건. 단위 테스트 28개.
 
 ## 실제 기기에서 확인할 것
 
@@ -16,7 +16,7 @@
 
 ## 나중에 (선택)
 
-- 대시보드를 열면 그래픽 메모리 약 190MB (닫으면 회수됨, 누수 아님). 큰 shadow나 Canvas 레이어 의심. 아직 안 봤다.
+- 대시보드를 열면 그래픽 메모리 약 190MB (닫으면 회수됨, 누수 아님). 10/31 `footprint`로 다시 재 보니 그래픽 187MB 중 128MB가 시스템이 필요하면 가져가는(reclaimable) 캐시였다. 큰 shadow나 Canvas 레이어 캐시로 보인다. 급하지 않다.
 - 디스크·GPU 샘플러가 tick마다 IOKit 매칭을 새로 한다 (`IORegistry.forEach`, `GPUSampler`). 각각 0.03ms 안팎이라 급하지 않다. 바꾸려면 매칭 알림(`IOServiceAddMatchingNotification`)으로 서비스 목록을 기억해 둔다.
 - `DashboardView`가 `StatsStore` 전체를 관찰한다. snapshot과 history가 매 tick 같이 바뀌어서 나눠도 다시 그리는 횟수는 거의 같다.
 - 도우미 watchdog은 자동 모드에서도 2초마다 깨어난다 (leeway 0.5초를 줬다). 수동일 때만 돌리게 바꿀 수 있다.

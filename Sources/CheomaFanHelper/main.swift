@@ -95,14 +95,16 @@ final class FanService: NSObject, FanHelperProtocol, @unchecked Sendable {
         }
     }
 
-    /// 끝나면 다시 시도할 수 없으니 몇 번 더 해 본다
-    func shutdown() {
+    /// 자동으로 되돌리고 끝낸다. 끝나면 다시 시도할 수 없으니 몇 번 더 해 보고, queue 안에서 바로 끝내서
+    /// 그사이 줄 서 있던 setFanSpeeds가 다시 수동으로 바꾸지 못하게 한다
+    func shutdown() -> Never {
         queue.sync {
             for attempt in 1...3 {
-                if restoreAutomatic(reason: "도우미 종료") { return }
+                if restoreAutomatic(reason: "도우미 종료") { exit(0) }
                 if attempt < 3 { usleep(200_000) }
             }
             log("끝내기 전에 자동으로 되돌리지 못함")
+            exit(0)
         }
     }
 
@@ -219,10 +221,7 @@ listener.resume()
 // launchctl로 내릴 때도 팬을 자동으로 돌려놓고 끝낸다
 signal(SIGTERM, SIG_IGN)
 let terminationSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-terminationSource.setEventHandler {
-    service.shutdown()
-    exit(0)
-}
+terminationSource.setEventHandler { service.shutdown() }
 terminationSource.resume()
 
 log("시작 (허용된 앱: \(allowedRequirement ?? "없음"))")
