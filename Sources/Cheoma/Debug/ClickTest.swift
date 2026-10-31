@@ -9,13 +9,25 @@ enum ClickTest {
     static func run() {
         // `--render` 그림(같은 창 크기, 노치 220×38)에서 잰 버튼 가운데 (창 왼쪽 위 기준 pt). 버튼마다 새 창에서 누른다
         let targets: [(String, CGPoint)] = [
-            ("톱니", CGPoint(x: 837, y: 105)),
-            ("새 에이전트", CGPoint(x: 776, y: 105)),
+            ("톱니", CGPoint(x: 846, y: 107)),
+            ("새 에이전트 (+)", CGPoint(x: 814, y: 107)),
+            ("계정", CGPoint(x: 782, y: 107)),
+            ("사용량 카드", CGPoint(x: 560, y: 107)),
             ("왼쪽 목록 첫 줄", CGPoint(x: 260, y: 160)),
-            ("탭: 개요", CGPoint(x: 458, y: 63)),
+            ("최근 기록 첫 줄", CGPoint(x: 242, y: 306)),
+            ("탭: 개요", CGPoint(x: 450, y: 63)),
         ]
         if CommandLine.arguments.contains("--hit") {
             hitMap()
+            return
+        }
+        // `--at x,y x,y …`: 그 자리들을 눌러 본다
+        if let index = CommandLine.arguments.firstIndex(of: "--at") {
+            for text in CommandLine.arguments.dropFirst(index + 1) {
+                let numbers = text.split(separator: ",").compactMap { Double($0) }
+                guard numbers.count == 2 else { break }
+                test(text, at: CGPoint(x: numbers[0], y: numbers[1]))
+            }
             return
         }
         if CommandLine.arguments.contains("--grid") {

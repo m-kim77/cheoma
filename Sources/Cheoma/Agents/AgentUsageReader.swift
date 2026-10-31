@@ -29,6 +29,9 @@ final class AgentUsageReader {
     private var codexTitles: [String: String] = [:]
     private var codexIndex: (stat: JSONLFile.Stat, offset: Int64)?
 
+    // 계정 파일 (바뀌었을 때만 다시 읽는다)
+    private var accountFiles: [String: (stat: JSONLFile.Stat, claude: AgentAccounts.Claude?, codex: AgentAccounts.Codex?)] = [:]
+
     init(home: URL = FileManager.default.homeDirectoryForCurrentUser,
          environment: [String: String] = ProcessInfo.processInfo.environment) {
         self.home = home.path
@@ -58,6 +61,7 @@ final class AgentUsageReader {
 
         let codexHome = Self.codexHome(home: URL(fileURLWithPath: home), environment: environment).path
         usage.codex = refreshCodex(codexHome: codexHome, now: now, sessions: &sessions)
+        usage.codexAccount = codexAccount(codexHome: codexHome)
 
         // 이어 한 Codex 세션은 기록 파일이 여러 개라 같은 세션이 두 번 나온다. 가장 최근 것만 남긴다
         var seen = Set<String>()
@@ -229,9 +233,19 @@ final class AgentUsageReader {
         var usage = ClaudeUsage(account: URL(fileURLWithPath: account.dir).lastPathComponent, todayCostUSD: todayCost, todayTokens: todayTokens,
                                 blockCostUSD: 0, blockStartedAt: nil, blockEndsAt: nil,
                                 updatedAt: account.records.last.map { Date(timeIntervalSince1970: $0.time) })
+        usage.configDir = account.dir
+        let info = claudeAccount(configDir: account.dir)
+        usage.email = info?.email
+        usage.displayName = info?.displayName
+        usage.plan = info?.plan
+        // 한도는 Cheoma 상태 줄이 받은 값과 Claude Code가 받아 둔 값 중 새것
         if let limits = ClaudeStatusLine.load(account: usage.account, home: URL(fileURLWithPath: home)) {
             usage.limits = limits.windows
             usage.limitsUpdatedAt = limits.updatedAt
+        }
+        if let info, !info.limits.isEmpty, let fetched = info.limitsFetchedAt, fetched > (usage.limitsUpdatedAt ?? .distantPast) {
+            usage.limits = info.limits
+            usage.limitsUpdatedAt = fetched
         }
         if let blockStart, now - lastTime < Self.blockLength, now < blockStart + Self.blockLength {
             usage.blockCostUSD = blockCost
@@ -239,6 +253,30 @@ final class AgentUsageReader {
             usage.blockEndsAt = Date(timeIntervalSince1970: blockStart + Self.blockLength)
         }
         return usage
+    }
+
+    private func claudeAccount(configDir: String) -> AgentAccounts.Claude? {
+        let homeURL = URL(fileURLWithPath: home)
+        let path = AgentAccounts.claudeFile(configDir: URL(fileURLWithPath: configDir), home: homeURL).path
+        return accountFile(path, claude: { AgentAccounts.claude(json: $0) })?.claude
+    }
+
+    private func codexAccount(codexHome: String) -> AgentAccounts.Codex? {
+        accountFile(codexHome + "/auth.json", codex: { AgentAccounts.codex(authJSON: $0) })?.codex
+    }
+
+    private func accountFile(_ path: String, claude: ((Data) -> AgentAccounts.Claude?)? = nil,
+                             codex: ((Data) -> AgentAccounts.Codex?)? = nil)
+        -> (stat: JSONLFile.Stat, claude: AgentAccounts.Claude?, codex: AgentAccounts.Codex?)? {
+        guard let stat = JSONLFile.stat(path) else {
+            accountFiles[path] = nil
+            return nil
+        }
+        if let cached = accountFiles[path], cached.stat == stat { return cached }
+        guard let data = FileManager.default.contents(atPath: path) else { return nil }
+        let entry = (stat: stat, claude: claude?(data), codex: codex?(data))
+        accountFiles[path] = entry
+        return entry
     }
 
     private func recentSessions(_ account: ClaudeAccount, now: Double) -> [RecordedSession] {
@@ -264,7 +302,8 @@ final class AgentUsageReader {
             }
             result.append(RecordedSession(id: file.sessionID, kind: .claude, cwd: file.cwd, title: file.title ?? file.summary,
                                           lastActivity: Date(timeIntervalSince1970: item.stat.mtime), costUSD: cost,
-                                          lastMessage: file.lastMessage, isTurnComplete: file.isTurnComplete))
+                                          lastMessage: file.lastMessage, isTurnComplete: file.isTurnComplete,
+                                          account: URL(fileURLWithPath: account.dir).lastPathComponent, transcriptPath: item.path))
         }
         return result
     }
@@ -309,7 +348,7 @@ final class AgentUsageReader {
             let id = file.sessionID ?? ((path as NSString).lastPathComponent as NSString).deletingPathExtension
             sessions.append(RecordedSession(id: id, kind: .codex, cwd: file.cwd, title: file.sessionID.flatMap { codexTitles[$0] },
                                             lastActivity: Date(timeIntervalSince1970: stat.mtime), costUSD: nil,
-                                            lastMessage: file.lastMessage, isTurnComplete: file.isTurnComplete))
+                                            lastMessage: file.lastMessage, isTurnComplete: file.isTurnComplete, transcriptPath: path))
         }
 
         // 한도는 가장 최근 기록에서. 마지막 세션이 오류로 끝나면 rate_limits가 없어서 그 앞 파일들까지 끝부분을 본다

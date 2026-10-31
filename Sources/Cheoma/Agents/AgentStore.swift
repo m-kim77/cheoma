@@ -186,12 +186,33 @@ final class AgentStore: ObservableObject {
         }
     }
 
-    /// 새 tmux 세션에서 에이전트를 띄운다
-    func launch(_ kind: AgentKind, in folder: String) {
+    /// 새 tmux 세션에서 에이전트를 띄운다. Claude는 계정(설정 폴더)을 고를 수 있다
+    func launch(_ kind: AgentKind, in folder: String, configDir: String? = nil) {
         remember(folder: folder)
+        let command = AgentResume.launchCommand(kind, configDir: configDir)
+        start(kind, command: command, in: folder)
+    }
+
+    /// 끝난 세션(또는 다른 계정으로 옮길 세션)을 새 tmux 세션에서 이어서 한다.
+    /// 다른 Claude 계정으로 이으면 대화 기록을 그 계정으로 복사해 두고 그 계정으로 띄운다
+    func resume(_ target: AgentResume.Target, configDir: String?) {
+        let dirs = hookStatus.claude.map(\.configDir.path)
+        let command = AgentResume.resumeCommand(target, configDir: configDir)
+        start(target.kind, command: command, in: target.cwd) {
+            if let configDir { try AgentResume.prepare(target, for: configDir, among: dirs) }
+        }
+    }
+
+    private func start(_ kind: AgentKind, command: String, in folder: String,
+                       before: @escaping @Sendable () throws -> Void = {}) {
+        guard isTmuxAvailable else {
+            show(message: "tmux가 필요해요 (brew install tmux)")
+            return
+        }
         queue.async {
             do {
-                let location = try TmuxBridge.shared.launch(kind, in: folder)
+                try before()
+                let location = try TmuxBridge.shared.launch(command: command, namePrefix: TmuxBridge.sessionPrefix + kind.rawValue, in: folder)
                 DispatchQueue.main.async { [weak self] in
                     MainActor.assumeIsolated {
                         guard let self else { return }
@@ -862,7 +883,8 @@ extension AgentStore {
         store.selectedID = "terminal:/dev/ttys004"
         store.recordedSessions = [
             RecordedSession(id: "c9db0d62", kind: .claude, cwd: "/Users/me/Documents/MJ-couple", title: "Couple app onboarding flow",
-                            lastActivity: now.addingTimeInterval(-300), costUSD: 2.31, lastMessage: "온보딩 화면 세 장을 만들었어요.", isTurnComplete: true),
+                            lastActivity: now.addingTimeInterval(-300), costUSD: 2.31, lastMessage: "온보딩 화면 세 장을 만들었어요.", isTurnComplete: true,
+                            account: ".claude", transcriptPath: "/Users/me/.claude/projects/-Users-me-Documents-MJ-couple/c9db0d62.jsonl"),
             RecordedSession(id: "019a0e3d", kind: .codex, cwd: "/Users/me/Documents/api", title: nil,
                             lastActivity: now.addingTimeInterval(-1_800), costUSD: nil, lastMessage: "Added pagination to /items", isTurnComplete: true),
         ]
@@ -875,14 +897,15 @@ extension AgentStore {
                             blockStartedAt: now.addingTimeInterval(-2 * 3_600), blockEndsAt: now.addingTimeInterval(3 * 3_600),
                             limits: [UsageWindow(usedPercent: 12, windowMinutes: 300, resetsAt: now.addingTimeInterval(2 * 3_600)),
                                      UsageWindow(usedPercent: 68, windowMinutes: 10_080, resetsAt: now.addingTimeInterval(3 * 86_400))],
-                            updatedAt: now, limitsUpdatedAt: now),
+                            updatedAt: now, limitsUpdatedAt: now, configDir: "/Users/me/.claude", email: "me@example.com", plan: "Max 20x"),
                 ClaudeUsage(account: ".claude-account2", todayCostUSD: 12.4, todayTokens: 5_800_000, blockCostUSD: 4.7,
                             blockStartedAt: now.addingTimeInterval(-3_600), blockEndsAt: now.addingTimeInterval(4 * 3_600),
                             limits: [UsageWindow(usedPercent: 91, windowMinutes: 300, resetsAt: now.addingTimeInterval(40 * 60)),
                                      UsageWindow(usedPercent: 35, windowMinutes: 10_080, resetsAt: now.addingTimeInterval(5 * 86_400))],
-                            updatedAt: now, limitsUpdatedAt: now),
+                            updatedAt: now, limitsUpdatedAt: now, configDir: "/Users/me/.claude-account2", email: "me@work.example", plan: "Max 5x"),
             ],
-            recentSessions: store.recordedSessions)
+            recentSessions: store.recordedSessions,
+            codexAccount: AgentAccounts.Codex(mode: "chatgpt", email: "me@example.com", plan: "plus"))
         store.hookStatus = HookInstaller.Status(
             claude: [HookInstaller.ClaudeTarget(configDir: URL(fileURLWithPath: "/Users/me/.claude"), hooks: true, statusLine: .installed),
                      HookInstaller.ClaudeTarget(configDir: URL(fileURLWithPath: "/Users/me/.claude-account2"), hooks: false, statusLine: .notInstalled)],

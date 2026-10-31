@@ -16,6 +16,10 @@ struct AgentsSetupPane: View {
                     Text(isEmpty ? "코드 에이전트를 여기서 지켜봐요" : "연결 설정")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer(minLength: 0)
+                    AgentsCapsuleButton(title: "설정 창 열기", symbol: "macwindow") {
+                        NotificationCenter.default.post(name: SettingsWindowController.openNotification, object: nil)
+                    }
+                    .help("계정 · 알림 연결 · 노치 모양을 한곳에서 봐요")
                     if !isEmpty { closeButton }
                 }
                 Text("Terminal 탭이나 tmux에서 도는 Claude Code · Codex 같은 에이전트의 상태를 보여주고, 터미널로 가지 않고도 여기서 답할 수 있어요.")
@@ -210,6 +214,8 @@ struct AgentsLauncherPane: View {
     @State private var folder: String?
     /// "다른 폴더…"로 고른 폴더 (목록 맨 앞에 붙는다)
     @State private var pickedFolder: String?
+    /// Claude를 띄울 계정 (설정 폴더). 고르지 않으면 한도가 가장 넉넉한 계정
+    @State private var configDir: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -245,6 +251,16 @@ struct AgentsLauncherPane: View {
                 }
             }
 
+            if selectedKind == .claude, store.usage.claude.count > 1 {
+                section("계정") {
+                    HStack(spacing: 5) {
+                        ForEach(store.usage.claude, id: \.account) { account in
+                            accountButton(account)
+                        }
+                    }
+                }
+            }
+
             section("폴더") {
                 ViewThatFits(in: .vertical) {
                     folderList
@@ -259,7 +275,7 @@ struct AgentsLauncherPane: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.orange)
                 } else if let kind = selectedKind, let folder = selectedFolder {
-                    Text("\(kind.command) · \(AgentsStyle.abbreviated(folder))")
+                    Text("\(AgentResume.launchCommand(kind, configDir: kind == .claude ? selectedConfigDir : nil)) · \(AgentsStyle.abbreviated(folder))")
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
@@ -268,7 +284,7 @@ struct AgentsLauncherPane: View {
                 Spacer(minLength: 0)
                 AgentsCapsuleButton(title: "실행", symbol: "play.fill", prominent: canLaunch) {
                     guard canLaunch, let kind = selectedKind, let folder = selectedFolder else { return }
-                    store.launch(kind, in: folder)
+                    store.launch(kind, in: folder, configDir: kind == .claude ? selectedConfigDir : nil)
                     pane = .session
                 }
                 .disabled(!canLaunch)
@@ -281,6 +297,36 @@ struct AgentsLauncherPane: View {
     }
 
     private var selectedKind: AgentKind? { kind ?? store.installedAgents.first }
+
+    /// 고른 계정, 아니면 5시간 한도를 가장 적게 쓴 계정
+    private var selectedConfigDir: String? {
+        if let configDir { return configDir }
+        return store.usage.claude.min { Self.fiveHourPercent($0) < Self.fiveHourPercent($1) }?.configDir
+    }
+
+    private static func fiveHourPercent(_ account: ClaudeUsage) -> Double {
+        guard let window = account.limits.first(where: { $0.windowMinutes == 300 }) else { return 100 }
+        return (window.resetsAt.map { $0 <= Date() } ?? false) ? 0 : window.usedPercent
+    }
+
+    private func accountButton(_ account: ClaudeUsage) -> some View {
+        let isSelected = account.configDir == selectedConfigDir
+        let percent = account.limits.isEmpty ? "" : " \(Int(Self.fiveHourPercent(account).rounded()))%"
+        return Button { configDir = account.configDir } label: {
+            Text(AgentsStyle.accountName(account.account) + percent)
+                .font(.system(size: 10.5, weight: .semibold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.horizontal, 9)
+                .frame(height: 24)
+                .background(.white.opacity(isSelected ? 0.2 : 0.07), in: Capsule())
+                .overlay(Capsule().strokeBorder(.white.opacity(isSelected ? 0.35 : 0), lineWidth: 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help([account.email, account.plan].compactMap { $0 }.joined(separator: " · ") + (percent.isEmpty ? "" : " · 5시간 한도\(percent) 씀"))
+    }
     private var selectedFolder: String? { folder ?? folders.first }
     private var canLaunch: Bool { store.isTmuxAvailable && selectedKind != nil && selectedFolder != nil }
 

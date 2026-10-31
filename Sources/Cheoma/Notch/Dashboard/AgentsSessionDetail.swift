@@ -6,10 +6,17 @@ struct AgentsSessionDetail: View {
     let session: AgentSession
     let store: AgentStore
     let model: NotchModel
+    /// "다른 계정으로" 단추를 눌러 이어서 하기 단추들을 펼쳤다
+    @State private var showsResume = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
+            if let target = resumeTarget, showsResume || session.state == .exited {
+                // 아직 도는 세션은 같은 계정으로 하나 더 띄울 까닭이 없으니 다른 계정만
+                AgentsResumeOptions(target: target, currentAccount: session.account, includesCurrent: session.state == .exited,
+                                    store: store) { showsResume = false }
+            }
             AgentScreenPreview(screen: session.screen, placeholder: placeholder)
                 .equatable()
                 .frame(minHeight: 54, maxHeight: .infinity)
@@ -28,6 +35,7 @@ struct AgentsSessionDetail: View {
         .padding(10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AgentsStyle.cardFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .onChange(of: session.id) { _, _ in showsResume = false }
     }
 
     private var header: some View {
@@ -46,6 +54,11 @@ struct AgentsSessionDetail: View {
                 }
             }
             Spacer(minLength: 6)
+            // 한도가 찬 계정의 대화를 다른 계정으로 옮겨 이어서 하기 (끝난 세션은 이어서 하기 단추가 늘 보인다)
+            if resumeTarget != nil, session.kind == .claude, session.state != .exited, store.usage.claude.count > 1 {
+                AgentsCapsuleButton(title: "다른 계정으로", symbol: "arrow.triangle.swap") { showsResume.toggle() }
+                    .help("이 대화를 다른 Claude 계정으로 이어서 해요")
+            }
             if session.location.canReply {
                 AgentsCapsuleButton(title: "터미널로 가기", symbol: "arrow.up.forward.app") {
                     store.reveal(session.id)
@@ -59,6 +72,10 @@ struct AgentsSessionDetail: View {
                 .help("Cheoma가 띄운 tmux 세션을 끝내요")
             }
         }
+    }
+
+    private var resumeTarget: AgentResume.Target? {
+        AgentsResumeOptions.target(session, store: store)
     }
 
     private var placeholder: String {

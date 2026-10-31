@@ -33,6 +33,7 @@ final class StatusBarController: NSObject {
     /// 노치를 펼쳤을 때 모양 (메뉴의 체크 표시와 선택)
     var currentTheme: (() -> NotchTheme)?
     var onSelectTheme: ((NotchTheme) -> Void)?
+    var onOpenSettings: (() -> Void)?
 
     override init() {
         super.init()
@@ -107,8 +108,9 @@ final class StatusBarController: NSObject {
         themeItem.submenu = themes
         let help = NSMenuItem(title: "⌘ 누른 채 아이콘을 | 왼쪽으로 끌면 숨겨져요", action: nil, keyEquivalent: "")
         help.isEnabled = false
+        let settings = NSMenuItem(title: "설정…", action: #selector(openSettings), keyEquivalent: ",")
         let quit = NSMenuItem(title: "종료", action: #selector(quit), keyEquivalent: "q")
-        for item in [showHidden, hide, test, warnings, login, themeItem, .separator(), help, .separator(), quit] {
+        for item in [showHidden, hide, test, warnings, login, themeItem, settings, .separator(), help, .separator(), quit] {
             item.target = self
             menu.addItem(item)
         }
@@ -275,6 +277,7 @@ final class StatusBarController: NSObject {
         guard let raw = sender.representedObject as? String, let theme = NotchTheme(rawValue: raw) else { return }
         onSelectTheme?(theme)
     }
+    @objc private func openSettings() { onOpenSettings?() }
     @objc private func quit() { NSApp.terminate(nil) }
 
     private static func symbol(_ name: String) -> NSImage? {

@@ -8,19 +8,28 @@ struct AgentsUsageStrip: View {
     static let height: CGFloat = 38
 
     var body: some View {
-        HStack(spacing: 8) {
-            // 자리가 모자라면 Codex를 작은 막대로, Claude 비용은 토큰 수를 빼고, 그래도 모자라면 앞의 계정만 보여준다
-            ViewThatFits(in: .horizontal) {
-                cards(codexCompact: false, claude: usage.claude, compact: false)
-                cards(codexCompact: true, claude: usage.claude, compact: false)
-                cards(codexCompact: true, claude: usage.claude, compact: true)
-                cards(codexCompact: true, claude: Array(usage.claude.prefix(2)), compact: true)
-                cards(codexCompact: true, claude: Array(usage.claude.prefix(1)), compact: true)
-            }
-            Spacer(minLength: 0)
-            buttons
+        // 자리가 모자라면 Codex를 작은 막대로, 단추를 아이콘만, Claude 비용은 토큰 수를 빼고, 그래도 모자라면 앞의 계정만 보여준다.
+        // 계정은 되도록 다 보이게 단추부터 줄인다
+        ViewThatFits(in: .horizontal) {
+            row(codexCompact: false, claude: usage.claude, compact: false, compactButtons: false)
+            row(codexCompact: true, claude: usage.claude, compact: false, compactButtons: false)
+            row(codexCompact: true, claude: usage.claude, compact: false, compactButtons: true)
+            row(codexCompact: true, claude: usage.claude, compact: true, compactButtons: true)
+            row(codexCompact: true, claude: Array(usage.claude.prefix(2)), compact: true, compactButtons: true)
+            row(codexCompact: true, claude: Array(usage.claude.prefix(1)), compact: true, compactButtons: true)
         }
         .frame(height: Self.height)
+    }
+
+    private func row(codexCompact: Bool, claude: [ClaudeUsage], compact: Bool, compactButtons: Bool) -> some View {
+        HStack(spacing: 8) {
+            cards(codexCompact: codexCompact, claude: claude, compact: compact)
+                // 사용량 카드를 누르면 계정 한눈에 보기
+                .contentShape(Rectangle())
+                .onTapGesture { pane = pane == .accounts ? .session : .accounts }
+            Spacer(minLength: 0)
+            buttons(compact: compactButtons)
+        }
     }
 
     private func cards(codexCompact: Bool, claude: [ClaudeUsage], compact: Bool) -> some View {
@@ -38,23 +47,38 @@ struct AgentsUsageStrip: View {
         .fixedSize()
     }
 
-    private var buttons: some View {
+    private func buttons(compact: Bool) -> some View {
         HStack(spacing: 6) {
+            Button { pane = pane == .accounts ? .session : .accounts } label: {
+                Image(systemName: "person.2")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .frame(width: 26, height: 26)
+                    .background(.white.opacity(pane == .accounts ? 0.2 : 0.1), in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help("계정 (이메일 · 요금제 · 한도)")
+            .accessibilityLabel("계정")
             Button { pane = pane == .launcher ? .session : .launcher } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "plus")
                         .font(.system(size: 9.5, weight: .bold))
-                    Text("새 에이전트")
-                        .lineLimit(1)
-                        .fixedSize()
+                    if !compact {
+                        Text("새 에이전트")
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
                 }
                 .font(.system(size: 11, weight: .semibold))
-                .padding(.horizontal, 10)
+                .frame(minWidth: compact ? 26 : nil)
+                .padding(.horizontal, compact ? 0 : 10)
                 .frame(height: 26)
                 .background(.white.opacity(pane == .launcher ? 0.2 : 0.1), in: Capsule())
                 .contentShape(Capsule())
             }
             .buttonStyle(.plain)
+            .help("새 에이전트")
+            .accessibilityLabel("새 에이전트")
             Button { pane = pane == .setup ? .session : .setup } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 11.5, weight: .semibold))

@@ -14,6 +14,9 @@ enum UsageDump {
         print(String(format: "읽는 데 처음 %.1fms, 다음 %.1fms", first, second))
 
         print("\nCodex")
+        if let account = usage.codexAccount {
+            print("  로그인 \(account.mode ?? "-") · \(account.email ?? "-") · \(account.plan ?? "-")")
+        }
         if let codex = usage.codex {
             print("  요금제 \(codex.plan ?? "?") · \(ago(codex.updatedAt)) 기록")
             for (name, window) in [("primary", codex.primary), ("secondary", codex.secondary)] {
@@ -29,6 +32,7 @@ enum UsageDump {
         if usage.claude.isEmpty { print("  기록 없음") }
         for account in usage.claude {
             print(String(format: "  %@  오늘 $%.2f · %@ 토큰", account.account, account.todayCostUSD, tokens(account.todayTokens)))
+            print("    계정 \(account.email ?? "-") · 요금제 \(account.plan ?? "-") · 한도 받은 때 \(account.limitsUpdatedAt.map(date) ?? "-")")
             if let started = account.blockStartedAt, let ends = account.blockEndsAt {
                 print(String(format: "    5시간 구간 $%.2f (%@ ~ %@)", account.blockCostUSD, date(started), date(ends)))
             }

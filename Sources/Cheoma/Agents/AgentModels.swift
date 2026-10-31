@@ -182,6 +182,13 @@ struct ClaudeUsage: Equatable, Sendable {
     var updatedAt: Date?
     /// limits를 받은 시각 (그 계정으로 Claude Code를 마지막으로 쓴 때)
     var limitsUpdatedAt: Date?
+    /// 설정 폴더 전체 경로 (이 계정으로 실행할 때 CLAUDE_CONFIG_DIR)
+    var configDir: String = ""
+    /// 로그인한 계정 (.claude.json의 oauthAccount)
+    var email: String?
+    var displayName: String?
+    /// "Max 20x" …
+    var plan: String?
 }
 
 /// 에이전트 탭 위쪽의 Claude 사용량을 무엇으로 보여줄지 (연결 설정에서 고른다)
@@ -225,6 +232,10 @@ struct RecordedSession: Identifiable, Equatable, Sendable {
     var lastMessage: String?
     /// 마지막 차례가 끝났는지 (Codex task_complete, Claude 마지막 줄이 어시스턴트 응답 …)
     var isTurnComplete: Bool?
+    /// Claude Code 설정 폴더 이름 (".claude", ".claude-account2" …). 이어서 할 때 이 계정의 기록을 쓴다
+    var account: String? = nil
+    /// 기록 파일 (다른 계정으로 이어서 할 때 그 계정으로 옮긴다)
+    var transcriptPath: String? = nil
 }
 
 /// 사용량과 최근 세션 (AgentUsageReader)
@@ -233,6 +244,8 @@ struct AgentUsage: Equatable, Sendable {
     var claude: [ClaudeUsage] = []
     /// 최근 24시간 세션, 최근 것부터
     var recentSessions: [RecordedSession] = []
+    /// Codex 로그인 (~/.codex/auth.json)
+    var codexAccount: AgentAccounts.Codex?
 }
 
 /// 에이전트 훅이 보낸 이벤트 (Claude Code 훅, Codex notify)

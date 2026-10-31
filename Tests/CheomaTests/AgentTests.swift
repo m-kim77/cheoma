@@ -305,3 +305,108 @@ final class ClaudeStatusLineTests: XCTestCase {
         XCTAssertTrue(target.isInstalled)
     }
 }
+
+/// 계정 파일 읽기 (.claude.json, ~/.codex/auth.json)
+final class AgentAccountsTests: XCTestCase {
+    func testClaudeAccountAndCachedLimits() throws {
+        let json = """
+        {"oauthAccount": {"emailAddress": "a@example.com", "displayName": "A", "organizationType": "claude_max",
+          "organizationRateLimitTier": "default_claude_max_20x", "planDisplayName": ""},
+         "cachedUsageUtilization": {"fetchedAtMs": 1793419990486, "utilization": {
+           "five_hour": {"utilization": 10, "resets_at": "2026-10-31T07:19:59.651958+00:00"},
+           "seven_day": {"utilization": 67, "resets_at": "2026-11-05T07:59:00+00:00"},
+           "seven_day_opus": null}}}
+        """
+        let account = try XCTUnwrap(AgentAccounts.claude(json: Data(json.utf8)))
+        XCTAssertEqual(account.email, "a@example.com")
+        XCTAssertEqual(account.plan, "Max 20x")
+        XCTAssertEqual(account.limits.map(\.usedPercent), [10, 67])
+        XCTAssertEqual(account.limits.map(\.windowMinutes), [300, 10_080])
+        XCTAssertEqual(account.limits.first?.resetsAt, AgentAccounts.date("2026-10-31T07:19:59Z"))
+        XCTAssertEqual(account.limitsFetchedAt?.timeIntervalSince1970 ?? 0, 1_793_419_990.486, accuracy: 0.001)
+    }
+
+    func testPlanNameAndMissingLogin() {
+        XCTAssertEqual(AgentAccounts.planName(["planDisplayName": "Ultra"]), "Ultra")
+        XCTAssertEqual(AgentAccounts.planName(["organizationType": "claude_pro"]), "Pro")
+        XCTAssertNil(AgentAccounts.claude(json: Data(#"{"pluginUsage": {}}"#.utf8)))
+    }
+
+    func testDefaultFolderUsesHomeFile() {
+        let home = URL(fileURLWithPath: "/Users/me")
+        XCTAssertEqual(AgentAccounts.claudeFile(configDir: home.appendingPathComponent(".claude"), home: home).path, "/Users/me/.claude.json")
+        XCTAssertEqual(AgentAccounts.claudeFile(configDir: home.appendingPathComponent(".claude-work"), home: home).path,
+                       "/Users/me/.claude-work/.claude.json")
+    }
+
+    func testCodexLoginFromIDToken() throws {
+        let claims = #"{"email":"c@example.com","https://api.openai.com/auth":{"chatgpt_plan_type":"plus"}}"#
+        let payload = Data(claims.utf8).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        let auth = #"{"auth_mode":"chatgpt","OPENAI_API_KEY":null,"tokens":{"id_token":"x.\#(payload).y"}}"#
+        let account = try XCTUnwrap(AgentAccounts.codex(authJSON: Data(auth.utf8)))
+        XCTAssertEqual(account, AgentAccounts.Codex(mode: "chatgpt", email: "c@example.com", plan: "plus"))
+    }
+}
+
+/// 이어서 하기 · 다른 계정으로 옮기기
+final class AgentResumeTests: XCTestCase {
+    func testCommands() {
+        let home = "/Users/me"
+        let target = AgentResume.Target(kind: .claude, sessionID: "abc", cwd: "/tmp", configDir: nil)
+        XCTAssertEqual(AgentResume.resumeCommand(target, configDir: "/Users/me/.claude", home: home), "claude --resume 'abc'")
+        XCTAssertEqual(AgentResume.resumeCommand(target, configDir: "/Users/me/.claude-work", home: home),
+                       "CLAUDE_CONFIG_DIR='/Users/me/.claude-work' claude --resume 'abc'")
+        XCTAssertEqual(AgentResume.launchCommand(.codex, configDir: "/Users/me/.claude-work", home: home), "codex")
+        let codex = AgentResume.Target(kind: .codex, sessionID: "019a", cwd: "/tmp", configDir: nil)
+        XCTAssertEqual(AgentResume.resumeCommand(codex, configDir: nil, home: home), "codex resume '019a'")
+    }
+
+    func testPrepareCopiesNewestTranscriptToOtherAccount() throws {
+        let manager = FileManager.default
+        let root = manager.temporaryDirectory.appendingPathComponent("cheoma-resume-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: root) }
+        let a = root.appendingPathComponent(".claude"), b = root.appendingPathComponent(".claude-work")
+        let project = "-Users-me-app"
+        let sourceFolder = a.appendingPathComponent("projects/\(project)")
+        try manager.createDirectory(at: sourceFolder.appendingPathComponent("s1/subagents"), withIntermediateDirectories: true)
+        try Data("new\n".utf8).write(to: sourceFolder.appendingPathComponent("s1.jsonl"))
+        try Data("sub\n".utf8).write(to: sourceFolder.appendingPathComponent("s1/subagents/x.jsonl"))
+        // 다른 계정에 더 오래된 기록이 있었다
+        let old = b.appendingPathComponent("projects/\(project)/s1.jsonl")
+        try manager.createDirectory(at: old.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("old\n".utf8).write(to: old)
+        try manager.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -3_600)], ofItemAtPath: old.path)
+
+        let target = AgentResume.Target(kind: .claude, sessionID: "s1", cwd: "/Users/me/app", configDir: a.path)
+        try AgentResume.prepare(target, for: b.path, among: [a.path, b.path])
+        XCTAssertEqual(try String(contentsOf: old, encoding: .utf8), "new\n")
+        XCTAssertEqual(try String(contentsOf: old.appendingPathExtension("cheoma-backup"), encoding: .utf8), "old\n")
+        XCTAssertTrue(manager.fileExists(atPath: b.appendingPathComponent("projects/\(project)/s1/subagents/x.jsonl").path))
+        // 원래 계정의 기록은 그대로
+        XCTAssertEqual(try String(contentsOf: sourceFolder.appendingPathComponent("s1.jsonl"), encoding: .utf8), "new\n")
+
+        // 이번엔 b가 가장 새것: a로 돌아갈 때 b의 것을 쓰고, b로 다시 이으면 아무것도 안 한다
+        try Data("newer\n".utf8).write(to: old)
+        try AgentResume.prepare(target, for: b.path, among: [a.path, b.path])
+        XCTAssertEqual(try String(contentsOf: old, encoding: .utf8), "newer\n")
+        try AgentResume.prepare(target, for: a.path, among: [a.path, b.path])
+        XCTAssertEqual(try String(contentsOf: sourceFolder.appendingPathComponent("s1.jsonl"), encoding: .utf8), "newer\n")
+
+        let missing = AgentResume.Target(kind: .claude, sessionID: "nope", cwd: "/tmp", configDir: a.path)
+        XCTAssertThrowsError(try AgentResume.prepare(missing, for: b.path, among: [a.path, b.path]))
+    }
+}
+
+/// 에이전트 탭 크기 제한
+final class AgentsSizeTests: XCTestCase {
+    func testClampToDefaultAndScreen() {
+        let minimum = DashboardTab.agents.openSize
+        let screen = CGSize(width: 1512, height: 982)
+        XCTAssertEqual(NotchModel.clampAgents(CGSize(width: 100, height: 100), screen: screen, theme: .basic), minimum)
+        let big = NotchModel.clampAgents(CGSize(width: 5_000, height: 5_000), screen: screen, theme: .basic)
+        XCTAssertEqual(big, CGSize(width: 1352, height: 862))
+        // 광화문은 지붕 높이만큼 낮다
+        XCTAssertLessThan(NotchModel.clampAgents(CGSize(width: 5_000, height: 5_000), screen: screen, theme: .gwanghwamun).height, big.height)
+    }
+}

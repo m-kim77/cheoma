@@ -74,6 +74,7 @@ enum PreviewRenderer {
         model.theme = .basic
 
         renderAgents(model: model, stats: stats, fans: fans, agents: agents, folder: folder)
+        renderSettings(model: model, agents: agents, folder: folder)
         checkOverflow(model: model, stats: stats, fans: fans, agents: agents)
         // `--live`: 이 맥의 진짜 세션 · 사용량으로 에이전트 탭을 그린다 (개인 정보가 보이니 문서 그림으로 쓰지 않는다)
         if CommandLine.arguments.contains("--live") {
@@ -85,6 +86,24 @@ enum PreviewRenderer {
             model.previewOpen(.agents)
             render(NotchView(model: model, stats: stats, fans: fans, agents: live), to: folder.appendingPathComponent("agents-live.png"))
             AgentReplyField.drawsPlaceholderOnly = false
+        }
+    }
+
+    /// 설정 창의 탭마다. Form은 AppKit 뷰라 ImageRenderer 대신 창에 그려서 뜬다
+    private static func renderSettings(model: NotchModel, agents: AgentStore, folder: URL) {
+        for (name, tab) in [("general", SettingsView.Tab.general), ("agents", .agents), ("accounts", .accounts)] {
+            let hosting = NSHostingView(rootView: SettingsView(model: model, agents: agents, tab: tab))
+            let window = NSWindow(contentRect: CGRect(x: -6000, y: -6000, width: 560, height: 520),
+                                  styleMask: [.titled], backing: .buffered, defer: false)
+            window.contentView = hosting
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+            guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { continue }
+            hosting.cacheDisplay(in: hosting.bounds, to: rep)
+            window.orderOut(nil)
+            let url = folder.appendingPathComponent("settings-\(name).png")
+            try? rep.representation(using: .png, properties: [:])?.write(to: url)
+            print("저장:", url.path)
         }
     }
 
@@ -120,7 +139,9 @@ enum PreviewRenderer {
          ("empty", empty, .session, nil),
          ("launcher", agents, .launcher, "terminal:/dev/ttys004"),
          ("launcher-no-tmux", empty, .launcher, nil),
-         ("setup", agents, .setup, "terminal:/dev/ttys004")]
+         ("setup", agents, .setup, "terminal:/dev/ttys004"),
+         ("accounts", agents, .accounts, "terminal:/dev/ttys004"),
+         ("record", agents, .record("c9db0d62"), "terminal:/dev/ttys004")]
     }
 
     /// 탭마다 내용이 펼친 크기 안에 들어가는지 잰다. 넘치면 아래쪽이 모양에 잘려 안 보인다

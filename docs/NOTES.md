@@ -110,6 +110,10 @@
 - 노치 클릭은 `Cheoma --click-test`로 확인한다: 같은 패널을 화면 밖에 띄우고 `NSEvent.mouseEvent`를 `panel.sendEvent`로 바로 넣는다 (마우스 커서는 그대로). `--grid`는 버튼 둘레를 촘촘히, `--key`는 키 창이 될 수 있는 상태로. 실제로 터미널에 글자를 보내는 버튼(선택지 · 보내기)은 누르지 않는다.
 - Claude 구독 한도(5시간 · 주간)는 기록 파일에 없고 상태 줄 명령의 입력 JSON에만 있다: `rate_limits.five_hour/seven_day.used_percentage, resets_at`(초). 세션에서 첫 요청을 보내기 전에는 `rate_limits`가 아예 없다 (10/31 확인). 상태 줄 명령은 자주 불리는데 Cheoma 실행 파일은 처음만 0.4초, 그 뒤 0.01초.
 - Claude Code는 돌고 있는 프로세스마다 `<설정 폴더>/sessions/<pid>.json`을 적는다: sessionId, cwd, status(`idle` 입력 기다림 · `busy` 작업 중 · `waiting` 권한 묻기), statusUpdatedAt(ms). 어느 설정 폴더에 있는지로 계정도 안다. 같은 폴더에서 여러 세션을 띄워도 이걸로 구분한다.
+- `sessions/<pid>.json`의 status는 한 차례 내내 `busy`로 남는다 (도구를 돌리는 사이에도). 화면(입력창은 일하는 중에도 보인다)이나 tty 출력으로 판단하면 작업 중 ↔ 입력 기다림을 오간다. 차례가 끝나 셸이 남아 있으면 `shell`이 몇 시간씩 남는다 (10/31 확인).
+- Claude Code는 손대지 않아도 혼자 돈다: 기다리는 동안 프롬프트 캐시가 끝나기 전에 대화를 줄이고("Compacted while idle … `idleCompaction`: false로 끔"), 돌아오면 요약(`away_summary`, /config에서 recap 끔)을 만든다. 이 맥 기록에서 이틀 동안 대화 줄이기 22번, 요약 144번. 이때는 UserPromptSubmit · Stop 훅이 오지 않는다.
+- 계정 정보: 기본 폴더(~/.claude)의 로그인은 홈의 `~/.claude.json`, 다른 폴더는 `<폴더>/.claude.json`의 `oauthAccount`(emailAddress, planDisplayName, organizationRateLimitTier "default_claude_max_20x"). `cachedUsageUtilization.utilization.five_hour/seven_day`에 Claude Code가 받아 둔 한도(utilization %, resets_at은 소수점 여섯 자리 ISO 문자열)와 `fetchedAtMs`. 그래서 기본 계정을 `CLAUDE_CONFIG_DIR=~/.claude`로 띄우면 로그인이 안 된 것처럼 된다 (이 변수를 붙이지 않는다).
+- 다른 계정으로 이어서 하기: `<설정 폴더>/projects/<작업 폴더 이름>/<세션 ID>.jsonl`을 다른 계정의 같은 자리로 복사하고 `CLAUDE_CONFIG_DIR=… claude --resume <ID>` (10/31 확인: 예전 대화가 그대로 나온다). 그 계정에서 처음 여는 폴더면 신뢰 창이 먼저 뜬다. Codex 로그인은 `~/.codex/auth.json`(auth_mode, id_token 안의 email · chatgpt_plan_type).
 - 사용량: Codex 한도는 rollout 기록의 `token_count` 이벤트(rate_limits)에서, Claude 비용은 기록의 토큰 수와 cost-state로 배운 모델별 단가로 계산한다. 처음 읽기는 릴리스 빌드에서 약 0.3초(48시간치), 그 뒤로는 바뀐 부분만 읽어 약 12ms.
 
 ## 성능

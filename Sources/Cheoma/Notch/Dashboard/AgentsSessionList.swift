@@ -5,7 +5,9 @@ struct AgentsSessionList: View {
     let sessions: [AgentSession]
     let recorded: [RecordedSession]
     let selectedID: AgentSession.ID?
+    let selectedRecordID: RecordedSession.ID?
     let onSelect: (AgentSession.ID) -> Void
+    let onSelectRecord: (RecordedSession.ID) -> Void
 
     var body: some View {
         // 경과 시간("3분")은 세션이 안 바뀌어도 흐르므로 30초마다 다시 그린다
@@ -34,14 +36,15 @@ struct AgentsSessionList: View {
                     .onTapGesture { onSelect(session.id) }
             }
             if !recorded.isEmpty {
-                Text("최근 기록 · 보기만")
+                Text("최근 기록 · 눌러서 이어서 하기")
                     .font(.system(size: 9.5, weight: .semibold))
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 6)
                     .padding(.top, sessions.isEmpty ? 0 : 8)
                     .padding(.bottom, 2)
                 ForEach(recorded) { record in
-                    RecordedRow(record: record, now: now)
+                    RecordedRow(record: record, isSelected: record.id == selectedRecordID, now: now)
+                        .onTapGesture { onSelectRecord(record.id) }
                 }
             }
         }
@@ -111,6 +114,7 @@ private struct SessionRow: View {
 
 private struct RecordedRow: View {
     let record: RecordedSession
+    let isSelected: Bool
     let now: Date
 
     var body: some View {
@@ -129,8 +133,12 @@ private struct RecordedRow: View {
                 .fixedSize()
         }
         .padding(.horizontal, 6)
-        .frame(height: 19)
+        .frame(height: 21)
+        .background(isSelected ? Color.white.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .contentShape(Rectangle())
         .help(help)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     private var project: String? {
@@ -146,7 +154,7 @@ private struct RecordedRow: View {
         var lines = [text]
         if let message = record.lastMessage { lines.append(message) }
         if let cost = record.costUSD { lines.append("비용 \(AgentsStyle.cost(cost))") }
-        lines.append("터미널 밖에서 돈 세션이라 보기만 해요")
+        lines.append("누르면 이어서 할 수 있어요")
         return lines.joined(separator: "\n")
     }
 }

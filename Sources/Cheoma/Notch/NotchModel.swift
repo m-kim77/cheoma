@@ -40,27 +40,78 @@ final class NotchModel: ObservableObject {
     }
 
     @Published var theme = NotchTheme.saved {
-        didSet { NotchTheme.saved = theme }
+        didSet {
+            NotchTheme.saved = theme
+            fitAgentsToScreen()
+        }
     }
 
     /// true인 동안은 마우스가 벗어나도 닫지 않는다 (에이전트에 보낼 답을 입력하는 중)
     @Published var keepsOpen = false
 
+    /// 에이전트 탭 크기. 오른쪽 아래 모서리를 끌어 키운다 (가장 작게는 기본 크기)
+    @Published private(set) var agentsSize = NotchModel.savedAgentsSize {
+        didSet { UserDefaults.standard.set(NSStringFromSize(agentsSize), forKey: Self.agentsSizeKey) }
+    }
+    /// 모서리를 끄는 중 (마우스가 노치 밖으로 나가도 닫지 않는다)
+    @Published var isResizing = false
+    /// 노치가 있는 화면 크기 (에이전트 탭을 얼마나 키울 수 있는지)
+    var screenSize = CGSize(width: 1512, height: 982)
+    private static let agentsSizeKey = "agents.size"
+
+    private static var savedAgentsSize: CGSize {
+        guard let text = UserDefaults.standard.string(forKey: agentsSizeKey) else { return DashboardTab.agents.openSize }
+        let size = NSSizeFromString(text)
+        return size.width > 0 && size.height > 0 ? size : DashboardTab.agents.openSize
+    }
+
+    /// 탭마다 펼친 크기 (에이전트 탭만 사용자가 바꾼다)
+    func contentSize(for tab: DashboardTab) -> CGSize {
+        tab == .agents ? agentsSize : tab.openSize
+    }
+
+    /// 에이전트 탭 크기를 바꾼다. 기본 크기보다 작게, 화면보다 크게는 안 된다
+    func resizeAgents(to size: CGSize) {
+        let clamped = Self.clampAgents(size, screen: screenSize, theme: theme)
+        if clamped != agentsSize { agentsSize = clamped }
+    }
+
+    /// 화면이나 노치 모양이 바뀌었을 때 지금 크기를 다시 맞춘다
+    func fitAgentsToScreen() {
+        resizeAgents(to: agentsSize)
+    }
+
+    static func clampAgents(_ size: CGSize, screen: CGSize, theme: NotchTheme) -> CGSize {
+        let minimum = DashboardTab.agents.openSize
+        let width = min(max(size.width, minimum.width), max(screen.width - 160, minimum.width))
+        // 광화문은 폭에 따라 지붕이 커지니 그만큼 낮게
+        let roof = theme == .gwanghwamun ? Gwanghwamun.frameSize(content: CGSize(width: width, height: 0)).height : 0
+        let height = min(max(size.height, minimum.height), max(screen.height - 120 - roof, minimum.height))
+        return CGSize(width: width.rounded(), height: height.rounded())
+    }
+
     /// 펼쳤을 때 모양 전체의 크기
     var openSize: CGSize {
         switch theme {
-        case .basic: tab.openSize
+        case .basic: contentSize(for: tab)
         case .gwanghwamun: Gwanghwamun.frameSize(content: dashboardSize)
         }
     }
 
     /// 펼쳤을 때 대시보드 내용의 크기. 광화문은 지붕이 노치를 덮으니 노치 높이만큼 비울 필요가 없다
     var dashboardSize: CGSize {
+        let size = contentSize(for: tab)
         switch theme {
-        case .basic: tab.openSize
-        case .gwanghwamun: CGSize(width: tab.openSize.width,
-                                  height: tab.openSize.height - notchSize.height + Gwanghwamun.dashboardTopInset)
+        case .basic: return size
+        case .gwanghwamun: return CGSize(width: size.width, height: size.height - notchSize.height + Gwanghwamun.dashboardTopInset)
         }
+    }
+
+    /// 창이 담아야 하는 가장 큰 모양 (모든 탭 · 모든 테마, 지금 에이전트 탭 크기 포함)
+    var largestOpenSize: CGSize {
+        let agents = [agentsSize, Gwanghwamun.frameSize(content: agentsSize)]
+        return CGSize(width: max(Self.maxOpenSize.width, agents.map(\.width).max() ?? 0),
+                      height: max(Self.maxOpenSize.height, agents.map(\.height).max() ?? 0))
     }
 
     private var openWork: DispatchWorkItem?
@@ -95,7 +146,7 @@ final class NotchModel: ObservableObject {
 
     func updateMouse(inHotZone: Bool, inOpenZone: Bool) {
         if isOpen {
-            if !inOpenZone && !keepsOpen { isOpen = false; isHovering = false }
+            if !inOpenZone && !keepsOpen && !isResizing { isOpen = false; isHovering = false }
             return
         }
         if isHovering != inHotZone { isHovering = inHotZone }

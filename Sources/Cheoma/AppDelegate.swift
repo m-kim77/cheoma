@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let agents = AgentStore()
     private var notchController: NotchWindowController?
     private var statusBar: StatusBarController?
+    private var settings: SettingsWindowController?
     private let systemEvents = SystemEventMonitor()
     private let warnings = WarningAlerts()
     private var notifyObserver: NSObjectProtocol?
@@ -46,7 +47,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusBar.currentTheme = { [weak self] in self?.notchModel.theme ?? .basic }
         statusBar.onSelectTheme = { [weak self] theme in self?.notchModel.theme = theme }
+        let settings = SettingsWindowController(model: notchModel, agents: agents)
+        statusBar.onOpenSettings = { [weak settings] in settings?.show() }
+        self.settings = settings
         self.statusBar = statusBar
+        NotificationCenter.default.publisher(for: SettingsWindowController.openNotification)
+            .sink { [weak self] _ in self?.settings?.show() }
+            .store(in: &cancellables)
 
         warnings.onAlert = { [weak self] alert in self?.notchModel.show(alert) }
         systemEvents.onThermalStateChange = { [weak self] state in self?.warnings.thermalStateChanged(to: state) }

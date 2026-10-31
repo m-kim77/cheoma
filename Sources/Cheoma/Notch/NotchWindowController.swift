@@ -10,13 +10,15 @@ final class NotchWindowController {
     private var monitors: [Any] = []
     private var cancellables = Set<AnyCancellable>()
 
-    /// 펼쳤을 때 그림자까지 들어가도록 여유를 둔 창 크기
-    private static let windowSize = CGSize(width: NotchModel.maxOpenSize.width + 60,
-                                           height: NotchModel.maxOpenSize.height + 40)
+    /// 펼쳤을 때 그림자까지 들어가도록 여유를 둔 창 크기. 에이전트 탭을 키우면 같이 커진다
+    private var windowSize: CGSize {
+        let open = model.largestOpenSize
+        return CGSize(width: open.width + 60, height: open.height + 40)
+    }
 
     init(model: NotchModel, stats: StatsStore, fans: FanController, agents: AgentStore) {
         self.model = model
-        panel = OverlayPanel(size: Self.windowSize)
+        panel = OverlayPanel(size: CGSize(width: model.largestOpenSize.width + 60, height: model.largestOpenSize.height + 40))
         // 메뉴바보다 위에 그려야 노치 영역을 덮을 수 있음
         panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) + 3)
         panel.ignoresMouseEvents = true
@@ -41,6 +43,15 @@ final class NotchWindowController {
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: OverlayPanel.releaseKeyFocusNotification)
             .sink { [weak panel] _ in panel?.giveUpKeyFocus() }
+            .store(in: &cancellables)
+
+        // 에이전트 탭 크기가 바뀌면 창도 맞춘다 (창은 화면 위 가운데에 붙어 있어서 모양은 제자리에 있다)
+        model.$agentsSize
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                // 값이 바뀐 다음 차례에 (sink는 바뀌기 직전에 불린다)
+                DispatchQueue.main.async { self?.layout() }
+            }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
@@ -81,12 +92,12 @@ final class NotchWindowController {
         guard let screen = Self.preferredScreen() else { return }
         self.screen = screen
         model.notchSize = Self.notchSize(of: screen)
+        model.screenSize = screen.frame.size
+        model.fitAgentsToScreen()
         let frame = screen.frame
-        panel.setFrame(CGRect(x: frame.midX - Self.windowSize.width / 2,
-                              y: frame.maxY - Self.windowSize.height,
-                              width: Self.windowSize.width,
-                              height: Self.windowSize.height),
-                       display: true)
+        let size = windowSize
+        let target = CGRect(x: frame.midX - size.width / 2, y: frame.maxY - size.height, width: size.width, height: size.height)
+        if panel.frame != target { panel.setFrame(target, display: true) }
         updateVirtualNotch()
     }
 
