@@ -860,7 +860,7 @@ extension AgentStore {
             AgentSession(
                 id: "tmux:%3", kind: .codex, pid: 5202,
                 location: .tmux(paneID: "%3", tty: "/dev/ttys007"),
-                cwd: "/Users/me/Documents/MJ-couple", title: nil,
+                cwd: "/Users/me/Documents/shop-app", title: nil,
                 startedAt: now.addingTimeInterval(-720), state: .working, stateSince: now.addingTimeInterval(-42),
                 analysis: ScreenAnalysis(state: .working, question: nil, choices: [], summary: "Working (42s • esc to interrupt)"),
                 screen: TerminalScreen(text: codexScreen, capturedAt: now),
@@ -882,9 +882,9 @@ extension AgentStore {
         }.sorted(by: order)
         store.selectedID = "terminal:/dev/ttys004"
         store.recordedSessions = [
-            RecordedSession(id: "c9db0d62", kind: .claude, cwd: "/Users/me/Documents/MJ-couple", title: "Couple app onboarding flow",
+            RecordedSession(id: "c9db0d62", kind: .claude, cwd: "/Users/me/Documents/shop-app", title: "Checkout onboarding flow",
                             lastActivity: now.addingTimeInterval(-300), costUSD: 2.31, lastMessage: "온보딩 화면 세 장을 만들었어요.", isTurnComplete: true,
-                            account: ".claude", transcriptPath: "/Users/me/.claude/projects/-Users-me-Documents-MJ-couple/c9db0d62.jsonl"),
+                            account: ".claude", transcriptPath: "/Users/me/.claude/projects/-Users-me-Documents-shop-app/c9db0d62.jsonl"),
             RecordedSession(id: "019a0e3d", kind: .codex, cwd: "/Users/me/Documents/api", title: nil,
                             lastActivity: now.addingTimeInterval(-1_800), costUSD: nil, lastMessage: "Added pagination to /items", isTurnComplete: true),
         ]
@@ -913,7 +913,7 @@ extension AgentStore {
         store.terminalPermission = .granted
         store.isTmuxAvailable = true
         store.installedAgents = [.claude, .codex, .opencode, .pi]
-        store.recentFolders = ["/Users/me/Documents/menu_bar", "/Users/me/Documents/MJ-couple", "/Users/me/notes"]
+        store.recentFolders = ["/Users/me/Documents/menu_bar", "/Users/me/Documents/shop-app", "/Users/me/notes"]
         return store
     }
 }

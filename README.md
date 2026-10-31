@@ -14,6 +14,7 @@ Cheoma does the same for your MacBook's notch:
 - **Rings the chime.** Charger, unlock, overheating, low memory and low battery show up as small alerts around the notch.
 - **Watches the weather inside your Mac.** Hover over the notch to see CPU, GPU, memory, power, network, storage, temperatures and the apps using the most.
 - **Keeps things cool.** Set fan speeds yourself: a fixed RPM per fan, or a temperature curve.
+- **Calls you back to the agents.** See which Claude Code, Codex, OpenCode or pi session is waiting for you, answer it from the notch, and keep an eye on your subscription limits.
 
 **[Download Cheoma](https://github.com/m-kim77/cheoma/releases/latest/download/Cheoma.zip)** · free and open source · Apple Silicon · macOS 14 or later · the interface is in Korean (this page translates every label)
 
@@ -52,6 +53,7 @@ Move the pointer onto the notch and the dashboard opens. Move away and it closes
 | 온도 · Thermal | CPU, GPU, SSD and battery temperatures, fan RPM, 10-minute temperature graph |
 | 팬 · Fans | Fan control (below). Hidden on Macs without fans |
 | 앱 · Apps | Apps using the most CPU, CPU power and memory, with helper processes grouped into their app |
+| 에이전트 · Agents | Coding agents running in your terminal (below) |
 
 The columns button at the top right switches the shape between **기본** (Basic, rounded) and **광화문** (Gwanghwamun, the main gate of Gyeongbokgung Palace in Seoul).
 
@@ -105,6 +107,30 @@ Safety:
 - The helper can only set each fan between its own minimum and maximum speed, or hand control back to macOS.
 - The helper only talks to the Cheoma it was installed for, checked by code signature.
 
+### Coding agents
+
+The **에이전트** (Agents) tab watches the coding agents running in your terminal: Claude Code, Codex, OpenCode and pi. You can see which one is waiting for you without hunting through windows.
+
+<p align="center">
+  <img src="docs/images/agents.png" width="760" alt="Agents tab: a list of agent sessions with their state, and a Claude Code session asking to proceed with three numbered choices">
+</p>
+
+- **State**: each session shows **작업 중** (Working), **선택 기다림** (Waiting for a choice) or **입력 기다림** (Waiting for input). When an agent asks something or finishes its turn, an alert appears beside the notch. Hover over the alert to open that session.
+- **Answer from the notch**: see the agent's screen, pick a numbered choice, or type a reply. **터미널로 가기** (Go to terminal) brings its window to the front. In Terminal.app tabs Cheoma can only send text and Return; tmux sessions get every key.
+- **Subscription limits**: the bar at the top shows how much of the 5-hour and weekly limits Codex and each Claude account have used. The people button lists every signed-in account with its email and plan. In the Settings window you can show Claude as an estimated API cost instead.
+- **Several Claude accounts**: Cheoma finds `~/.claude` and every `~/.claude-*` folder you use with `CLAUDE_CONFIG_DIR`, and labels each session with its account.
+- **New agent**: **+** starts an agent in a folder you pick, in a new tmux session. For Claude Code you can pick the account; by default it's the one with the most of its 5-hour limit left.
+- **Resume**: click a session under **최근 기록** (Recent) and choose **이어서 하기** (Resume). To move a conversation to another Claude account, for example when one runs out, choose that account instead. Cheoma copies the conversation there and leaves the original in place. Claude Code may ask whether you trust the folder the first time that account opens it.
+- **Resize**: drag the bottom-right corner of the tab. Double-click the corner to go back to the default size.
+
+To set it up, click the gear button in the Agents tab:
+
+- **Terminal 연결** (Connect Terminal) lets Cheoma read and answer sessions in Terminal.app tabs. tmux sessions don't need it.
+- **모두 연결** (Connect all) adds Cheoma's hooks so alerts arrive the moment something happens. For Claude Code it edits `settings.json` in each config folder, and also sets the status line if you don't have one, which keeps the limits up to date. For Codex it sets `notify` in `config.toml` if nothing else uses it. Other settings are left alone, and the original file is kept as `.cheoma-backup`. **연결 끊기** (Disconnect) removes only Cheoma's entries.
+- New agents and resuming need tmux: `brew install tmux`.
+
+Claude Code also runs on its own sometimes while you're away: it compacts an idle conversation before its cache expires, and writes a recap for when you come back. Both use a little of your plan. Cheoma shows these as waiting, without alerts. To turn them off, add `"idleCompaction": false` to `settings.json`, and turn off recaps in `/config`.
+
 ### Right-click menu
 
 Right-click `⌄` in the menu bar:
@@ -117,6 +143,7 @@ Right-click `⌄` in the menu bar:
 | 경고 알림 (과열·메모리·배터리) | Warning alerts (heat, memory, battery) |
 | 로그인 시 자동 실행 | Launch at login |
 | 노치 모양 › 기본 / 광화문 | Notch shape › Basic / Gwanghwamun |
+| 설정… (⌘,) | Settings… : general, agents and accounts in one window |
 | 종료 | Quit |
 
 ### Alerts from Terminal
@@ -139,6 +166,7 @@ make && /Applications/Cheoma.app/Contents/MacOS/Cheoma --notify "Build passed" -
 | Permission | Why | Where |
 |---|---|---|
 | Accessibility | To read and press menu bar icons hidden behind the notch | `⌄` › 권한 허용하러 가기, or System Settings › Privacy & Security › Accessibility |
+| Automation › Terminal | To read and answer agent sessions in Terminal.app tabs (only if you use the Agents tab) | Agents tab › gear › Terminal 연결 |
 | Administrator password, once | To install the fan helper, a small background service that runs as root and sets fan speeds | Fans tab › 도우미 설치 |
 
 The dashboard, sensors and alerts need no permission.
@@ -146,6 +174,8 @@ The dashboard, sensors and alerts need no permission.
 ## Privacy
 
 Cheoma has no network code: no analytics, no update checks, no accounts. Everything it measures stays on your Mac.
+
+The Agents tab reads files the agents keep on your Mac (session status, conversation logs and the account and limit info they save) and terminal screens. It changes agent settings only when you click **모두 연결** (Connect all), and copies a conversation only when you resume it in another account.
 
 ## Update
 
@@ -160,10 +190,11 @@ Your settings and graph history are kept.
 
 ## Uninstall
 
-1. If you installed the fan helper: in the Fans tab, choose **자동** (Auto) and click **도우미 제거** (Remove helper) at the bottom right.
-2. Right-click `⌄`: turn off **로그인 시 자동 실행** if it is on, then click **종료**.
-3. Move `Cheoma.app` to the Trash.
-4. To remove settings, graph history, the log and the permission entry:
+1. If you connected coding agents: Agents tab › gear › **연결 끊기** (Disconnect). Left in place, the hooks do nothing once the app is gone.
+2. If you installed the fan helper: in the Fans tab, choose **자동** (Auto) and click **도우미 제거** (Remove helper) at the bottom right.
+3. Right-click `⌄`: turn off **로그인 시 자동 실행** if it is on, then click **종료**.
+4. Move `Cheoma.app` to the Trash.
+5. To remove settings, graph history, the log and the permission entry:
 
    ```sh
    defaults delete io.github.m-kim77.cheoma
@@ -194,7 +225,7 @@ Something else? [Open an issue](https://github.com/m-kim77/cheoma/issues).
 - Fan control is tested on a MacBook Pro (M5 Max). M1 and M2 Macs may handle manual fan control differently; if the fans don't follow, Cheoma goes back to automatic within 8 seconds. MacBook Air has no fans, so it has no Fans tab.
 - Other apps' frame rates aren't available through public APIs, so only the display's refresh rate is shown.
 - The Apps tab shows only your own processes. System processes such as WindowServer and kernel_task can't be read without root. "CPU power" estimates each app's CPU share only, so GPU-heavy apps show less than they use.
-- Cheoma uses about 0.2% CPU with the dashboard closed and about 1% with it open.
+- Cheoma uses about 0.2% CPU with the dashboard closed and about 1% with it open. Watching about 15 agent sessions adds about 0.5%.
 
 ## Build from source
 
@@ -232,6 +263,8 @@ Sources/
 │   ├── Stats/           sensors (CPU, GPU, memory, network, disk, power, thermal, per-app usage) and history
 │   ├── Fans/            talking to and installing the fan helper
 │   ├── Events/          charger and unlock events, warning alerts
+│   ├── Agents/          finding coding agent sessions, reading their screens and usage, hooks, tmux and Terminal
+│   ├── Settings/        the Settings window
 │   └── Debug/           --render previews and --bench
 ├── CheomaShared/        SMC access and the fan helper's XPC protocol, shared by both
 └── CheomaFanHelper/     the root fan helper
