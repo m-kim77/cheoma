@@ -409,4 +409,11 @@ final class AgentsSizeTests: XCTestCase {
         // 광화문은 지붕 높이만큼 낮다
         XCTAssertLessThan(NotchModel.clampAgents(CGSize(width: 5_000, height: 5_000), screen: screen, theme: .gwanghwamun).height, big.height)
     }
+    func testTextScaleRaisesMinimum() {
+        let screen = CGSize(width: 1512, height: 982)
+        let minimum = CGSize(width: 988, height: 525)  // 기본 크기 × 130%
+        XCTAssertEqual(NotchModel.clampAgents(CGSize(width: 760, height: 404), minimum: minimum, screen: screen, theme: .basic), minimum)
+        XCTAssertEqual(AgentsTextScale.larger.percent, "130%")
+        XCTAssertEqual(AgentsTextScale.allCases.map(\.rawValue), AgentsTextScale.allCases.map(\.rawValue).sorted())
+    }
 }

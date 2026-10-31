@@ -53,6 +53,28 @@ final class NotchModel: ObservableObject {
     @Published private(set) var agentsSize = NotchModel.savedAgentsSize {
         didSet { UserDefaults.standard.set(NSStringFromSize(agentsSize), forKey: Self.agentsSizeKey) }
     }
+    /// 에이전트 탭 글자 크기. 키우면 탭도 그만큼 커진다 (가장 작은 크기가 기본 크기 × 배율)
+    @Published var agentsTextScale = NotchModel.savedTextScale {
+        didSet {
+            UserDefaults.standard.set(agentsTextScale.rawValue, forKey: AgentsTextScale.defaultsKey)
+            guard agentsTextScale != oldValue else { return }
+            // 글자가 커진 만큼 탭도 키운다 (줄일 때는 사용자가 키워 둔 크기를 남긴다)
+            let ratio = agentsTextScale.rawValue / oldValue.rawValue
+            resizeAgents(to: ratio > 1 ? CGSize(width: agentsSize.width * ratio, height: agentsSize.height * ratio) : agentsSize)
+        }
+    }
+
+    private static var savedTextScale: AgentsTextScale {
+        AgentsTextScale(rawValue: UserDefaults.standard.double(forKey: AgentsTextScale.defaultsKey)) ?? .normal
+    }
+
+    /// 에이전트 탭 기본 크기 (글자 크기 배율을 곱한 것). 이보다 작게는 줄일 수 없다
+    var agentsMinimumSize: CGSize {
+        let base = DashboardTab.agents.openSize
+        let scale = agentsTextScale.rawValue
+        return CGSize(width: (base.width * scale).rounded(), height: (base.height * scale).rounded())
+    }
+
     /// 모서리를 끄는 중 (마우스가 노치 밖으로 나가도 닫지 않는다)
     @Published var isResizing = false
     /// 노치가 있는 화면 크기 (에이전트 탭을 얼마나 키울 수 있는지)
@@ -72,7 +94,7 @@ final class NotchModel: ObservableObject {
 
     /// 에이전트 탭 크기를 바꾼다. 기본 크기보다 작게, 화면보다 크게는 안 된다
     func resizeAgents(to size: CGSize) {
-        let clamped = Self.clampAgents(size, screen: screenSize, theme: theme)
+        let clamped = Self.clampAgents(size, minimum: agentsMinimumSize, screen: screenSize, theme: theme)
         if clamped != agentsSize { agentsSize = clamped }
     }
 
@@ -81,8 +103,7 @@ final class NotchModel: ObservableObject {
         resizeAgents(to: agentsSize)
     }
 
-    static func clampAgents(_ size: CGSize, screen: CGSize, theme: NotchTheme) -> CGSize {
-        let minimum = DashboardTab.agents.openSize
+    static func clampAgents(_ size: CGSize, minimum: CGSize = DashboardTab.agents.openSize, screen: CGSize, theme: NotchTheme) -> CGSize {
         let width = min(max(size.width, minimum.width), max(screen.width - 160, minimum.width))
         // 광화문은 폭에 따라 지붕이 커지니 그만큼 낮게
         let roof = theme == .gwanghwamun ? Gwanghwamun.frameSize(content: CGSize(width: width, height: 0)).height : 0

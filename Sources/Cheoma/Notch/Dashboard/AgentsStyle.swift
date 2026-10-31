@@ -116,8 +116,10 @@ enum AgentsStyle {
 struct AgentMark: View {
     let kind: AgentKind
     var size: CGFloat = 22
+    @Environment(\.agentsScale) private var scale
 
     var body: some View {
+        let size = size * scale
         Image(systemName: AgentsStyle.symbol(kind))
             .font(.system(size: size * 0.48, weight: .bold))
             .foregroundStyle(AgentsStyle.color(kind))
@@ -137,14 +139,14 @@ struct AgentStateChip: View {
         HStack(spacing: 3) {
             if state == .working {
                 Image(systemName: "circle.fill")
-                    .font(.system(size: 5))
+                    .agentsFont(size: 5)
                     .symbolEffect(.pulse, options: .repeating)
             }
             Text(state.title)
                 .lineLimit(1)
                 .fixedSize()
         }
-        .font(.system(size: 9.5, weight: .semibold))
+        .agentsFont(size: 9.5, weight: .semibold)
         .foregroundStyle(state == .exited || state == .unknown ? Color.white.opacity(0.6) : color)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
@@ -165,13 +167,13 @@ struct AgentsCapsuleButton: View {
             HStack(spacing: 4) {
                 if let symbol {
                     Image(systemName: symbol)
-                        .font(.system(size: 9, weight: .bold))
+                        .agentsFont(size: 9, weight: .bold)
                 }
                 Text(title)
                     .lineLimit(1)
                     .fixedSize()
             }
-            .font(.system(size: 10.5, weight: .semibold))
+            .agentsFont(size: 10.5, weight: .semibold)
             .foregroundStyle(prominent ? Color.black : tint)
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
@@ -179,5 +181,76 @@ struct AgentsCapsuleButton: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - 글자 크기
+
+/// 에이전트 탭 글자 크기 배율 (설정 창에서 고른다). 글자와 함께 아이콘 · 줄 높이 · 목록 폭도 같이 커진다
+enum AgentsTextScale: Double, CaseIterable {
+    case normal = 1
+    case large = 1.15
+    case larger = 1.3
+    case largest = 1.5
+
+    static let defaultsKey = "agents.textScale"
+
+    var title: String {
+        switch self {
+        case .normal: "보통"
+        case .large: "크게"
+        case .larger: "더 크게"
+        case .largest: "가장 크게"
+        }
+    }
+
+    var percent: String { "\(Int((rawValue * 100).rounded()))%" }
+}
+
+private struct AgentsScaleKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 1
+}
+
+extension EnvironmentValues {
+    /// 에이전트 탭 안의 글자 · 고정 크기에 곱하는 배율
+    var agentsScale: CGFloat {
+        get { self[AgentsScaleKey.self] }
+        set { self[AgentsScaleKey.self] = newValue }
+    }
+}
+
+/// 배율을 곱한 시스템 글꼴
+private struct AgentsFont: ViewModifier {
+    @Environment(\.agentsScale) private var scale
+    let size: CGFloat
+    let weight: Font.Weight
+    let design: Font.Design
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size * scale, weight: weight, design: design))
+    }
+}
+
+/// 배율을 곱한 고정 크기
+private struct AgentsFrame: ViewModifier {
+    @Environment(\.agentsScale) private var scale
+    let width: CGFloat?
+    let height: CGFloat?
+    let alignment: Alignment
+
+    func body(content: Content) -> some View {
+        content.frame(width: width.map { $0 * scale }, height: height.map { $0 * scale }, alignment: alignment)
+    }
+}
+
+extension View {
+    /// 에이전트 탭 글꼴: 크기에 글자 크기 배율을 곱한다
+    func agentsFont(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> some View {
+        modifier(AgentsFont(size: size, weight: weight, design: design))
+    }
+
+    /// 에이전트 탭 고정 크기: 글자 크기 배율을 곱한다
+    func agentsFrame(width: CGFloat? = nil, height: CGFloat? = nil, alignment: Alignment = .center) -> some View {
+        modifier(AgentsFrame(width: width, height: height, alignment: alignment))
     }
 }

@@ -5,6 +5,7 @@ import SwiftUI
 /// Terminal 자동화 권한, Claude Code · Codex 훅, 새 에이전트 실행
 struct AgentsSetupPane: View {
     @ObservedObject var store: AgentStore
+    let model: NotchModel
     let isEmpty: Bool
     @Binding var pane: AgentsPane
     @AppStorage(ClaudeUsageDisplay.defaultsKey) private var usageDisplay = ClaudeUsageDisplay.limits
@@ -14,8 +15,9 @@ struct AgentsSetupPane: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Text(isEmpty ? "코드 에이전트를 여기서 지켜봐요" : "연결 설정")
-                        .font(.system(size: 13, weight: .semibold))
+                        .agentsFont(size: 13, weight: .semibold)
                     Spacer(minLength: 0)
+                    AgentsTextSizeButtons(model: model)
                     AgentsCapsuleButton(title: "설정 창 열기", symbol: "macwindow") {
                         NotificationCenter.default.post(name: SettingsWindowController.openNotification, object: nil)
                     }
@@ -23,7 +25,7 @@ struct AgentsSetupPane: View {
                     if !isEmpty { closeButton }
                 }
                 Text("Terminal 탭이나 tmux에서 도는 Claude Code · Codex 같은 에이전트의 상태를 보여주고, 터미널로 가지 않고도 여기서 답할 수 있어요.")
-                    .font(.system(size: 10.5))
+                    .agentsFont(size: 10.5)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -44,8 +46,8 @@ struct AgentsSetupPane: View {
     private var closeButton: some View {
         Button { pane = .session } label: {
             Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .bold))
-                .frame(width: 20, height: 20)
+                .agentsFont(size: 9, weight: .bold)
+                .agentsFrame(width: 20, height: 20)
                 .background(.white.opacity(0.1), in: Circle())
                 .contentShape(Circle())
         }
@@ -90,7 +92,7 @@ struct AgentsSetupPane: View {
                         ForEach(targets, id: \.configDir) { target in
                             Label(AgentsStyle.accountName(target.configDir.lastPathComponent),
                                   systemImage: target.isInstalled ? "checkmark.circle.fill" : "circle.dashed")
-                                .font(.system(size: 9.5, weight: .medium))
+                                .agentsFont(size: 9.5, weight: .medium)
                                 .foregroundStyle(target.isInstalled ? Color.green : Color.white.opacity(0.5))
                                 .lineLimit(1)
                                 .help(target.isInstalled ? "연결됨" : "아직 연결 안 됨")
@@ -130,11 +132,11 @@ struct AgentsSetupPane: View {
                 ForEach(ClaudeUsageDisplay.allCases, id: \.self) { option in
                     Button { usageDisplay = option } label: {
                         Text(option.title)
-                            .font(.system(size: 10, weight: .semibold))
+                            .agentsFont(size: 10, weight: .semibold)
                             .lineLimit(1)
                             .fixedSize()
                             .padding(.horizontal, 9)
-                            .frame(height: 22)
+                            .agentsFrame(height: 22)
                             .background(usageDisplay == option ? Color.white.opacity(0.2) : .clear, in: Capsule())
                             .contentShape(Capsule())
                     }
@@ -166,15 +168,15 @@ private struct SetupRow<Content: View>: View {
     var body: some View {
         HStack(spacing: 9) {
             Image(systemName: symbol)
-                .font(.system(size: 10.5, weight: .semibold))
+                .agentsFont(size: 10.5, weight: .semibold)
                 .foregroundStyle(.secondary)
-                .frame(width: 24, height: 24)
+                .agentsFrame(width: 24, height: 24)
                 .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             Text(title)
-                .font(.system(size: 11, weight: .semibold))
+                .agentsFont(size: 11, weight: .semibold)
                 .lineLimit(1)
                 .fixedSize()
-                .frame(width: 74, alignment: .leading)
+                .agentsFrame(width: 74, alignment: .leading)
             content
         }
         .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
@@ -186,7 +188,7 @@ private struct SetupDetail: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 10))
+            .agentsFont(size: 10)
             .foregroundStyle(.secondary)
             .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
@@ -199,7 +201,7 @@ private struct SetupDone: View {
 
     var body: some View {
         Label(text, systemImage: "checkmark.circle.fill")
-            .font(.system(size: 10.5, weight: .medium))
+            .agentsFont(size: 10.5, weight: .medium)
             .foregroundStyle(.green)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -221,15 +223,15 @@ struct AgentsLauncherPane: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .firstTextBaseline) {
                 Text("새 에이전트")
-                    .font(.system(size: 13, weight: .semibold))
+                    .agentsFont(size: 13, weight: .semibold)
                 Text("tmux 새 세션에서 실행해요")
-                    .font(.system(size: 10))
+                    .agentsFont(size: 10)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
                 Button { pane = .session } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .frame(width: 20, height: 20)
+                        .agentsFont(size: 9, weight: .bold)
+                        .agentsFrame(width: 20, height: 20)
                         .background(.white.opacity(0.1), in: Circle())
                         .contentShape(Circle())
                 }
@@ -240,7 +242,7 @@ struct AgentsLauncherPane: View {
             section("에이전트") {
                 if store.installedAgents.isEmpty {
                     Text("설치된 에이전트를 찾지 못했어요")
-                        .font(.system(size: 10.5))
+                        .agentsFont(size: 10.5)
                         .foregroundStyle(.secondary)
                 } else {
                     HStack(spacing: 5) {
@@ -272,11 +274,11 @@ struct AgentsLauncherPane: View {
             HStack(spacing: 8) {
                 if !store.isTmuxAvailable {
                     Label("tmux가 필요해요 (brew install tmux)", systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
+                        .agentsFont(size: 10)
                         .foregroundStyle(.orange)
                 } else if let kind = selectedKind, let folder = selectedFolder {
                     Text("\(AgentResume.launchCommand(kind, configDir: kind == .claude ? selectedConfigDir : nil)) · \(AgentsStyle.abbreviated(folder))")
-                        .font(.system(size: 10, design: .monospaced))
+                        .agentsFont(size: 10, design: .monospaced)
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -314,12 +316,12 @@ struct AgentsLauncherPane: View {
         let percent = account.limits.isEmpty ? "" : " \(Int(Self.fiveHourPercent(account).rounded()))%"
         return Button { configDir = account.configDir } label: {
             Text(AgentsStyle.accountName(account.account) + percent)
-                .font(.system(size: 10.5, weight: .semibold))
+                .agentsFont(size: 10.5, weight: .semibold)
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize()
                 .padding(.horizontal, 9)
-                .frame(height: 24)
+                .agentsFrame(height: 24)
                 .background(.white.opacity(isSelected ? 0.2 : 0.07), in: Capsule())
                 .overlay(Capsule().strokeBorder(.white.opacity(isSelected ? 0.35 : 0), lineWidth: 1))
                 .contentShape(Capsule())
@@ -342,7 +344,7 @@ struct AgentsLauncherPane: View {
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title)
-                .font(.system(size: 10, weight: .semibold))
+                .agentsFont(size: 10, weight: .semibold)
                 .foregroundStyle(.secondary)
             content()
         }
@@ -354,13 +356,13 @@ struct AgentsLauncherPane: View {
             HStack(spacing: 5) {
                 AgentMark(kind: item, size: 16)
                 Text(item.displayName)
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .agentsFont(size: 10.5, weight: .semibold)
                     .lineLimit(1)
                     .fixedSize()
             }
             .padding(.leading, 4)
             .padding(.trailing, 9)
-            .frame(height: 24)
+            .agentsFrame(height: 24)
             .background(.white.opacity(isSelected ? 0.2 : 0.07), in: Capsule())
             .overlay(Capsule().strokeBorder(.white.opacity(isSelected ? 0.35 : 0), lineWidth: 1))
             .contentShape(Capsule())
@@ -382,22 +384,22 @@ struct AgentsLauncherPane: View {
         return Button { folder = path } label: {
             HStack(spacing: 7) {
                 Image(systemName: isSelected ? "folder.fill" : "folder")
-                    .font(.system(size: 10.5))
+                    .agentsFont(size: 10.5)
                     .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-                    .frame(width: 16)
+                    .agentsFrame(width: 16)
                 Text(URL(fileURLWithPath: path).lastPathComponent)
-                    .font(.system(size: 11, weight: .semibold))
+                    .agentsFont(size: 11, weight: .semibold)
                     .lineLimit(1)
                     .fixedSize()
                 Text(AgentsStyle.abbreviated(path))
-                    .font(.system(size: 9.5))
+                    .agentsFont(size: 9.5)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 7)
-            .frame(height: 22)
+            .agentsFrame(height: 22)
             .background(isSelected ? Color.white.opacity(0.13) : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .contentShape(Rectangle())
         }
@@ -408,16 +410,16 @@ struct AgentsLauncherPane: View {
         Button(action: chooseFolder) {
             HStack(spacing: 7) {
                 Image(systemName: "folder.badge.plus")
-                    .font(.system(size: 10.5))
+                    .agentsFont(size: 10.5)
                     .foregroundStyle(.secondary)
-                    .frame(width: 16)
+                    .agentsFrame(width: 16)
                 Text("다른 폴더…")
-                    .font(.system(size: 11))
+                    .agentsFont(size: 11)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 7)
-            .frame(height: 22)
+            .agentsFrame(height: 22)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -444,5 +446,39 @@ struct AgentsLauncherPane: View {
             folder = url.path
         }
         if let previous, previous != NSRunningApplication.current { previous.activate() }
+    }
+}
+
+/// 에이전트 탭 글자 크기를 한 단계씩 줄이고 키운다 (설정 창에서도 고를 수 있다)
+struct AgentsTextSizeButtons: View {
+    @ObservedObject var model: NotchModel
+
+    var body: some View {
+        let scales = AgentsTextScale.allCases
+        let index = scales.firstIndex(of: model.agentsTextScale) ?? 0
+        HStack(spacing: 1) {
+            step("textformat.size.smaller", label: "글자 작게", enabled: index > 0) { model.agentsTextScale = scales[index - 1] }
+            Text(model.agentsTextScale.percent)
+                .agentsFont(size: 9.5, weight: .semibold)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+            step("textformat.size.larger", label: "글자 크게", enabled: index < scales.count - 1) { model.agentsTextScale = scales[index + 1] }
+        }
+        .padding(.horizontal, 3)
+        .background(Color.white.opacity(0.13), in: Capsule())
+        .help("에이전트 탭 글자 크기")
+    }
+
+    private func step(_ symbol: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .agentsFont(size: 10, weight: .semibold)
+                .agentsFrame(width: 20, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.35)
+        .accessibilityLabel(label)
     }
 }

@@ -26,7 +26,7 @@ struct AgentsSessionList: View {
         VStack(alignment: .leading, spacing: 2) {
             if sessions.isEmpty {
                 Text("실행 중인 에이전트가 없어요")
-                    .font(.system(size: 11))
+                    .agentsFont(size: 11)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 8)
@@ -37,7 +37,7 @@ struct AgentsSessionList: View {
             }
             if !recorded.isEmpty {
                 Text("최근 기록 · 눌러서 이어서 하기")
-                    .font(.system(size: 9.5, weight: .semibold))
+                    .agentsFont(size: 9.5, weight: .semibold)
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 6)
                     .padding(.top, sessions.isEmpty ? 0 : 8)
@@ -64,7 +64,7 @@ private struct SessionRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(session.projectName)
-                        .font(.system(size: 11.5, weight: .semibold))
+                        .agentsFont(size: 11.5, weight: .semibold)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 2)
@@ -72,12 +72,12 @@ private struct SessionRow: View {
                 }
                 HStack(spacing: 6) {
                     Text(subtitle)
-                        .font(.system(size: 10))
+                        .agentsFont(size: 10)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     Spacer(minLength: 2)
                     Text("\(place) · \(AgentsStyle.elapsed(since: session.stateSince, now: now))")
-                        .font(.system(size: 9.5))
+                        .agentsFont(size: 9.5)
                         .foregroundStyle(.tertiary)
                         .monospacedDigit()
                         .lineLimit(1)
@@ -121,19 +121,19 @@ private struct RecordedRow: View {
         HStack(spacing: 6) {
             AgentMark(kind: record.kind, size: 15)
             Text(text)
-                .font(.system(size: 10))
+                .agentsFont(size: 10)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer(minLength: 4)
             Text(AgentsStyle.ago(record.lastActivity, now: now))
-                .font(.system(size: 9))
+                .agentsFont(size: 9)
                 .foregroundStyle(.tertiary)
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize()
         }
         .padding(.horizontal, 6)
-        .frame(height: 21)
+        .agentsFrame(height: 21)
         .background(isSelected ? Color.white.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .contentShape(Rectangle())
         .help(help)

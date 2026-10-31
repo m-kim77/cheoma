@@ -28,7 +28,7 @@ struct AgentsSessionDetail: View {
                 replyRow
             } else {
                 Text("이 세션은 터미널에 연결되지 않아 보기만 할 수 있어요")
-                    .font(.system(size: 10))
+                    .agentsFont(size: 10)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -43,12 +43,12 @@ struct AgentsSessionDetail: View {
             AgentMark(kind: session.kind, size: 24)
             VStack(alignment: .leading, spacing: 1) {
                 Text("\(session.kind.displayName) · \(session.projectName)")
-                    .font(.system(size: 12, weight: .semibold))
+                    .agentsFont(size: 12, weight: .semibold)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if let title = session.title, !title.isEmpty {
                     Text(title)
-                        .font(.system(size: 10))
+                        .agentsFont(size: 10)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -89,20 +89,20 @@ struct AgentsSessionDetail: View {
                 Button { store.choose(choice, in: session.id) } label: {
                     HStack(spacing: 7) {
                         Text(choice.key.isEmpty ? "›" : choice.key)
-                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                            .agentsFont(size: 9.5, weight: .bold, design: .monospaced)
                             .foregroundStyle(choice.isHighlighted ? Color.black : Color.white.opacity(0.75))
                             .frame(minWidth: 16, minHeight: 16)
                             .padding(.horizontal, choice.key.count > 1 ? 3 : 0)
                             .background(choice.isHighlighted ? Color.orange : Color.white.opacity(0.12),
                                         in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                         Text(choice.label)
-                            .font(.system(size: 10.5, weight: choice.isHighlighted ? .semibold : .regular))
+                            .agentsFont(size: 10.5, weight: choice.isHighlighted ? .semibold : .regular)
                             .lineLimit(1)
                             .truncationMode(.tail)
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 5)
-                    .frame(height: 22)
+                    .agentsFrame(height: 22)
                     .background(choice.isHighlighted ? Color.orange.opacity(0.2) : Color.white.opacity(0.06),
                                 in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     .contentShape(Rectangle())
@@ -127,7 +127,7 @@ struct AgentsSessionDetail: View {
                 }
             } else if case .terminalApp = session.location {
                 Text("Terminal은 늘\nEnter까지 보내요")
-                    .font(.system(size: 9))
+                    .agentsFont(size: 9)
                     .foregroundStyle(.tertiary)
                     .lineSpacing(0)
                     .fixedSize()
@@ -139,12 +139,12 @@ struct AgentsSessionDetail: View {
         Button { store.send(key: key, to: session.id) } label: {
             Group {
                 if let symbol {
-                    Image(systemName: symbol).font(.system(size: 9.5, weight: .bold))
+                    Image(systemName: symbol).agentsFont(size: 9.5, weight: .bold)
                 } else {
-                    Text(title ?? "").font(.system(size: 9.5, weight: .semibold))
+                    Text(title ?? "").agentsFont(size: 9.5, weight: .semibold)
                 }
             }
-            .frame(width: 27, height: 24)
+            .agentsFrame(width: 27, height: 24)
             .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .contentShape(Rectangle())
         }
@@ -159,6 +159,13 @@ struct AgentsSessionDetail: View {
 struct AgentScreenPreview: View, Equatable {
     let screen: TerminalScreen?
     let placeholder: String
+    @Environment(\.agentsScale) private var scale
+    
+    // 바뀌었는지는 화면 글자로만 본다 (배율이 바뀌면 환경 값이 바뀌어 다시 그려진다)
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.screen == rhs.screen && lhs.placeholder == rhs.placeholder
+    }
+
     private static let inset = EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
 
     var body: some View {
@@ -167,7 +174,7 @@ struct AgentScreenPreview: View, Equatable {
                 let width = max(geo.size.width - Self.inset.leading - Self.inset.trailing, 1)
                 let height = max(geo.size.height - Self.inset.top - Self.inset.bottom, 1)
                 Text(prepared.attributed)
-                    .font(.system(size: Self.fontSize(width: width, columns: prepared.columns), design: .monospaced))
+                    .font(.system(size: Self.fontSize(width: width, columns: prepared.columns, scale: scale), design: .monospaced))
                     .foregroundStyle(.white.opacity(0.85))
                     .fixedSize()
                     .frame(width: width, height: height, alignment: .bottomLeading)
@@ -180,17 +187,17 @@ struct AgentScreenPreview: View, Equatable {
             .accessibilityValue(ANSIText.plain(screen.text))
         } else {
             Text(placeholder)
-                .font(.system(size: 10.5))
+                .agentsFont(size: 10.5)
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
     /// 가장 긴 줄이 폭에 들어가도록 10pt에서 8pt까지 줄인다. 그보다 길면 오른쪽이 잘린다
-    private static func fontSize(width: CGFloat, columns: CGFloat) -> CGFloat {
-        guard columns > 0 else { return 10 }
-        // SF Mono 글자 폭은 글자 크기의 0.618배 (넉넉히 0.625로 잡는다)
-        return min(max(width / (columns * 0.625), 8), 10)
+    private static func fontSize(width: CGFloat, columns: CGFloat, scale: CGFloat) -> CGFloat {
+        guard columns > 0 else { return 10 * scale }
+        // SF Mono 글자 폭은 글자 크기의 0.618배 (넉넉히 0.625로 잡는다). 가장 큰 글자는 글자 크기 배율을 따른다
+        return min(max(width / (columns * 0.625), 8), 10 * scale)
     }
 
     private struct Prepared {
@@ -248,11 +255,11 @@ struct AgentReplyField: View {
     var body: some View {
         if Self.drawsPlaceholderOnly {
             Text("답 입력…")
-                .font(.system(size: 11.5))
+                .agentsFont(size: 11.5)
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 9)
-                .frame(height: 24)
+                .agentsFrame(height: 24)
                 .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
         } else {
             field
@@ -262,7 +269,7 @@ struct AgentReplyField: View {
     private var field: some View {
         TextField("답 입력…", text: $text)
             .textFieldStyle(.plain)
-            .font(.system(size: 11.5))
+            .agentsFont(size: 11.5)
             .focused($isFocused)
             .onSubmit(submit)
             .onKeyPress(.escape) {
@@ -270,7 +277,7 @@ struct AgentReplyField: View {
                 return .handled
             }
             .padding(.horizontal, 9)
-            .frame(height: 24)
+            .agentsFrame(height: 24)
             .background(.white.opacity(isFocused ? 0.13 : 0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)

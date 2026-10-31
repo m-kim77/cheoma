@@ -65,7 +65,7 @@ private struct ClaudeAccountCard: View {
                     email: account.email ?? "로그인 정보 없음") {
             if account.limits.isEmpty {
                 Text("한도 정보 없음 · 이 계정으로 Claude Code를 한 번 쓰면 보여요")
-                    .font(.system(size: 9.5))
+                    .agentsFont(size: 9.5)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
@@ -101,7 +101,7 @@ private struct CodexAccountCard: View {
             let windows = [usage?.primary, usage?.secondary].compactMap { $0 }
             if windows.isEmpty {
                 Text("한도 정보 없음 · Codex를 한 번 쓰면 보여요")
-                    .font(.system(size: 9.5))
+                    .agentsFont(size: 9.5)
                     .foregroundStyle(.tertiary)
             } else {
                 ForEach(windows, id: \.windowMinutes) { AccountUsageBar(window: $0) }
@@ -129,11 +129,11 @@ private struct AccountCard<Bars: View, Footer: View>: View {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 5) {
                         Text(title)
-                            .font(.system(size: 11.5, weight: .semibold))
+                            .agentsFont(size: 11.5, weight: .semibold)
                             .lineLimit(1)
                         if let plan {
                             Text(plan)
-                                .font(.system(size: 9, weight: .bold))
+                                .agentsFont(size: 9, weight: .bold)
                                 .foregroundStyle(AgentsStyle.color(kind))
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
@@ -142,7 +142,7 @@ private struct AccountCard<Bars: View, Footer: View>: View {
                         }
                     }
                     Text(email)
-                        .font(.system(size: 9.5))
+                        .agentsFont(size: 9.5)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -150,7 +150,7 @@ private struct AccountCard<Bars: View, Footer: View>: View {
             }
             bars
             footer
-                .font(.system(size: 9))
+                .agentsFont(size: 9)
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
         }
@@ -171,10 +171,10 @@ struct AccountUsageBar: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(AgentsStyle.windowName(minutes: window.windowMinutes))
-                    .font(.system(size: 9.5))
+                    .agentsFont(size: 9.5)
                     .foregroundStyle(.secondary)
                 Text("\(Int(percent.rounded()))%")
-                    .font(.system(size: 11, weight: .semibold))
+                    .agentsFont(size: 11, weight: .semibold)
                     .monospacedDigit()
                 Spacer(minLength: 6)
                 if let resetsAt = window.resetsAt {
@@ -183,7 +183,7 @@ struct AccountUsageBar: View {
                         Text(isReset ? "초기화됨" : "\(AgentsStyle.until(resetsAt, now: now)) 초기화")
                         Text(isReset ? "초기화됨" : AgentsStyle.until(resetsAt, now: now))
                     }
-                    .font(.system(size: 9))
+                    .agentsFont(size: 9)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                 }
@@ -209,10 +209,10 @@ struct AgentsPaneHeader: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title)
-                .font(.system(size: 13, weight: .semibold))
+                .agentsFont(size: 13, weight: .semibold)
             if let detail {
                 Text(detail)
-                    .font(.system(size: 10))
+                    .agentsFont(size: 10)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -229,8 +229,8 @@ struct AgentsCloseButton: View {
     var body: some View {
         Button { pane = .session } label: {
             Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .bold))
-                .frame(width: 20, height: 20)
+                .agentsFont(size: 9, weight: .bold)
+                .agentsFrame(width: 20, height: 20)
                 .background(.white.opacity(0.1), in: Circle())
                 .contentShape(Circle())
         }
@@ -253,11 +253,11 @@ struct AgentsRecordDetail: View {
                 AgentMark(kind: record.kind, size: 24)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("\(record.kind.displayName) · \(project)")
-                        .font(.system(size: 12, weight: .semibold))
+                        .agentsFont(size: 12, weight: .semibold)
                         .lineLimit(1)
                     if let title = record.title, !title.isEmpty {
                         Text(title)
-                            .font(.system(size: 10))
+                            .agentsFont(size: 10)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -273,7 +273,7 @@ struct AgentsRecordDetail: View {
             }
             if let message = record.lastMessage, !message.isEmpty {
                 Text(message)
-                    .font(.system(size: 10.5))
+                    .agentsFont(size: 10.5)
                     .foregroundStyle(.white.opacity(0.85))
                     .lineLimit(6)
                     .padding(8)
@@ -285,7 +285,7 @@ struct AgentsRecordDetail: View {
                 AgentsResumeOptions(target: target, currentAccount: record.account, store: store) { pane = .session }
             } else {
                 Text(record.cwd == nil ? "작업 폴더를 몰라서 이어서 할 수 없어요" : "\(record.kind.displayName)는 여기서 이어서 할 수 없어요")
-                    .font(.system(size: 10))
+                    .agentsFont(size: 10)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -306,10 +306,10 @@ struct AgentsRecordDetail: View {
     private func info(_ name: String, _ value: String) -> some View {
         GridRow {
             Text(name)
-                .font(.system(size: 9.5))
+                .agentsFont(size: 9.5)
                 .foregroundStyle(.tertiary)
             Text(value)
-                .font(.system(size: 10))
+                .agentsFont(size: 10)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -343,7 +343,7 @@ struct AgentsResumeOptions: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(store.isTmuxAvailable ? "tmux 새 세션에서 이어서 해요" : "이어서 하려면 tmux가 필요해요 (brew install tmux)")
-                .font(.system(size: 9.5))
+                .agentsFont(size: 9.5)
                 .foregroundStyle(.tertiary)
             HStack(spacing: 6) {
                 ForEach(options, id: \.title) { option in

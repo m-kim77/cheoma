@@ -129,6 +129,33 @@ enum PreviewRenderer {
                        to: folder.appendingPathComponent("\(prefix)-\(name).png"))
             }
         }
+        // 글자 크기를 키운 모습 (탭도 기본 크기 × 배율로 커진다)
+        model.theme = .basic
+        for scale in [AgentsTextScale.larger, .largest] {
+            withTextScale(scale, model: model) {
+                for (name, store, pane, selection) in agentVariants(agents: agents, empty: empty)
+                where ["choice", "setup", "accounts", "launcher"].contains(name) {
+                    AgentsTab.previewPane = pane
+                    if let selection { store.select(selection) }
+                    model.previewOpen(.agents)
+                    render(NotchView(model: model, stats: stats, fans: fans, agents: store),
+                           to: folder.appendingPathComponent("agents-\(name)-\(Int(scale.rawValue * 100)).png"),
+                           canvas: model.largestOpenSize)
+                }
+            }
+        }
+    }
+
+    /// 글자 크기를 잠깐 바꿔서 그린다 (탭 크기와 함께 원래대로 되돌린다)
+    private static func withTextScale(_ scale: AgentsTextScale, model: NotchModel, _ body: () -> Void) {
+        let savedScale = model.agentsTextScale
+        let savedSize = model.agentsSize
+        model.agentsTextScale = .normal
+        model.resizeAgents(to: DashboardTab.agents.openSize)
+        model.agentsTextScale = scale
+        body()
+        model.agentsTextScale = savedScale
+        model.resizeAgents(to: savedSize)
     }
 
     private static func agentVariants(agents: AgentStore, empty: AgentStore)
@@ -182,10 +209,32 @@ enum PreviewRenderer {
             }
             AgentsTab.previewPane = nil
         }
+        // 글자 크기를 키우면 탭도 커지는데, 그 크기에서도 들어가는지
+        model.tab = .agents
+        for scale in AgentsTextScale.allCases where scale != .normal {
+            withTextScale(scale, model: model) {
+                let size = model.dashboardSize
+                for variant in agentVariants(agents: agents, empty: AgentStore()) {
+                    AgentsTab.previewPane = variant.pane
+                    let saved = variant.store.selectedID
+                    if let selection = variant.selection { variant.store.select(selection) }
+                    let view = DashboardView(topInset: model.notchSize.height, stats: stats, fans: fans, agents: variant.store, model: model,
+                                             tab: .constant(.agents), theme: .constant(.basic))
+                        .frame(width: size.width)
+                        .environment(\.colorScheme, .dark)
+                        .environment(\.agentsScale, scale.rawValue)
+                    let needed = NSHostingController(rootView: view).sizeThatFits(in: CGSize(width: size.width, height: 0)).height
+                    variant.store.select(saved)
+                    let verdict = needed > size.height + 0.5 ? "넘침" : "맞음"
+                    print("\(verdict) basic agents-\(variant.name) \(scale.percent): 내용 \(Int(needed.rounded(.up))) / 자리 \(Int(size.height))")
+                }
+                AgentsTab.previewPane = nil
+            }
+        }
     }
 
-    private static func render<V: View>(_ view: V, to url: URL) {
-        let size = CGSize(width: NotchModel.maxOpenSize.width + 60, height: NotchModel.maxOpenSize.height + 40)
+    private static func render<V: View>(_ view: V, to url: URL, canvas: CGSize = NotchModel.maxOpenSize) {
+        let size = CGSize(width: canvas.width + 60, height: canvas.height + 40)
         let content = view
             .frame(width: size.width, height: size.height)
             .background(LinearGradient(colors: [Color(red: 0.22, green: 0.27, blue: 0.42), Color(red: 0.52, green: 0.38, blue: 0.48)],

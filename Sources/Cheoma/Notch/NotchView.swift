@@ -17,6 +17,7 @@ struct NotchView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .environment(\.agentsScale, model.agentsTextScale.rawValue)
         .animation(Self.spring, value: model.phase)
         .animation(Self.spring, value: model.alert)
         .animation(Self.spring, value: model.tab)

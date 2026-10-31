@@ -77,14 +77,17 @@ private struct GeneralSettings: View {
                 Toggle("경고 알림 (과열 · 메모리 · 배터리)", isOn: $warnings)
                     .onChange(of: warnings) { _, value in WarningAlerts.isEnabled = value }
             }
-            Section("에이전트 탭 크기") {
-                LabeledContent("지금 크기", value: "\(Int(model.agentsSize.width)) × \(Int(model.agentsSize.height))")
+            Section("에이전트 탭") {
+                Picker("글자 크기", selection: $model.agentsTextScale) {
+                    ForEach(AgentsTextScale.allCases, id: \.self) { Text("\($0.title) · \($0.percent)").tag($0) }
+                }
+                LabeledContent("탭 크기", value: "\(Int(model.agentsSize.width)) × \(Int(model.agentsSize.height))")
                 HStack {
                     Text("노치를 펼친 뒤 오른쪽 아래 모서리를 끌어서 바꿔요")
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("기본 크기로") { model.resizeAgents(to: DashboardTab.agents.openSize) }
-                        .disabled(model.agentsSize == DashboardTab.agents.openSize)
+                    Button("기본 크기로") { model.resizeAgents(to: model.agentsMinimumSize) }
+                        .disabled(model.agentsSize == model.agentsMinimumSize)
                 }
             }
             // 로그인 항목은 .app 번들로 실행할 때만 등록할 수 있다

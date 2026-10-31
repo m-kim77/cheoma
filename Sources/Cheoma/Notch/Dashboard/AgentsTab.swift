@@ -47,7 +47,7 @@ struct AgentsTab: View {
                 } onSelectRecord: { id in
                     pane = .record(id)
                 }
-                .frame(width: Self.listWidth)
+                .agentsFrame(width: Self.listWidth)
                 detail(selected)
                     .overlay(alignment: .bottom) { bannerView }
             }
@@ -72,7 +72,7 @@ struct AgentsTab: View {
         case .launcher:
             AgentsLauncherPane(store: store, model: model, pane: $pane)
         case .setup:
-            AgentsSetupPane(store: store, isEmpty: false, pane: $pane)
+            AgentsSetupPane(store: store, model: model, isEmpty: false, pane: $pane)
         case .accounts:
             AgentsAccountsPane(store: store, pane: $pane)
         case .record(let id):
@@ -82,13 +82,13 @@ struct AgentsTab: View {
                 // 그 세션이 다시 돌기 시작해서 기록 목록에서 빠졌다
                 AgentsSessionDetail(session: selected, store: store, model: model)
             } else {
-                AgentsSetupPane(store: store, isEmpty: true, pane: $pane)
+                AgentsSetupPane(store: store, model: model, isEmpty: true, pane: $pane)
             }
         case .session:
             if let selected {
                 AgentsSessionDetail(session: selected, store: store, model: model)
             } else {
-                AgentsSetupPane(store: store, isEmpty: true, pane: $pane)
+                AgentsSetupPane(store: store, model: model, isEmpty: true, pane: $pane)
             }
         }
     }
@@ -97,7 +97,7 @@ struct AgentsTab: View {
     private var bannerView: some View {
         if let banner {
             Text(banner)
-                .font(.system(size: 10.5, weight: .medium))
+                .agentsFont(size: 10.5, weight: .medium)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 12)
@@ -157,7 +157,7 @@ struct AgentsResizeGrip: View {
                     model.isResizing = false
                 }
         )
-        .simultaneousGesture(TapGesture(count: 2).onEnded { model.resizeAgents(to: DashboardTab.agents.openSize) })
+        .simultaneousGesture(TapGesture(count: 2).onEnded { model.resizeAgents(to: model.agentsMinimumSize) })
         .help("끌어서 크기 바꾸기 · 두 번 누르면 기본 크기")
         .accessibilityLabel("에이전트 창 크기")
     }

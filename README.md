@@ -122,6 +122,7 @@ The **에이전트** (Agents) tab watches the coding agents running in your term
 - **New agent**: **+** starts an agent in a folder you pick, in a new tmux session. For Claude Code you can pick the account; by default it's the one with the most of its 5-hour limit left.
 - **Resume**: click a session under **최근 기록** (Recent) and choose **이어서 하기** (Resume). To move a conversation to another Claude account, for example when one runs out, choose that account instead. Cheoma copies the conversation there and leaves the original in place. Claude Code may ask whether you trust the folder the first time that account opens it.
 - **Resize**: drag the bottom-right corner of the tab. Double-click the corner to go back to the default size.
+- **Text size**: the 가 buttons in the gear pane, or the Settings window, make the text 115%, 130% or 150% bigger. The tab grows with it.
 
 To set it up, click the gear button in the Agents tab:
 

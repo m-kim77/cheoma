@@ -18,7 +18,7 @@ struct AgentsUsageStrip: View {
             row(codexCompact: true, claude: Array(usage.claude.prefix(2)), compact: true, compactButtons: true)
             row(codexCompact: true, claude: Array(usage.claude.prefix(1)), compact: true, compactButtons: true)
         }
-        .frame(height: Self.height)
+        .agentsFrame(height: Self.height)
     }
 
     private func row(codexCompact: Bool, claude: [ClaudeUsage], compact: Bool, compactButtons: Bool) -> some View {
@@ -51,8 +51,8 @@ struct AgentsUsageStrip: View {
         HStack(spacing: 6) {
             Button { pane = pane == .accounts ? .session : .accounts } label: {
                 Image(systemName: "person.2")
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .frame(width: 26, height: 26)
+                    .agentsFont(size: 10.5, weight: .semibold)
+                    .agentsFrame(width: 26, height: 26)
                     .background(.white.opacity(pane == .accounts ? 0.2 : 0.1), in: Circle())
                     .contentShape(Circle())
             }
@@ -62,17 +62,17 @@ struct AgentsUsageStrip: View {
             Button { pane = pane == .launcher ? .session : .launcher } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "plus")
-                        .font(.system(size: 9.5, weight: .bold))
+                        .agentsFont(size: 9.5, weight: .bold)
                     if !compact {
                         Text("새 에이전트")
                             .lineLimit(1)
                             .fixedSize()
                     }
                 }
-                .font(.system(size: 11, weight: .semibold))
+                .agentsFont(size: 11, weight: .semibold)
                 .frame(minWidth: compact ? 26 : nil)
                 .padding(.horizontal, compact ? 0 : 10)
-                .frame(height: 26)
+                .agentsFrame(height: 26)
                 .background(.white.opacity(pane == .launcher ? 0.2 : 0.1), in: Capsule())
                 .contentShape(Capsule())
             }
@@ -81,8 +81,8 @@ struct AgentsUsageStrip: View {
             .accessibilityLabel("새 에이전트")
             Button { pane = pane == .setup ? .session : .setup } label: {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .frame(width: 26, height: 26)
+                    .agentsFont(size: 11.5, weight: .semibold)
+                    .agentsFrame(width: 26, height: 26)
                     .background(.white.opacity(pane == .setup ? 0.2 : 0.1), in: Circle())
                     .contentShape(Circle())
             }
@@ -128,15 +128,15 @@ private struct WindowGauge: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(AgentsStyle.windowName(minutes: window.windowMinutes))
-                    .font(.system(size: 9.5))
+                    .agentsFont(size: 9.5)
                     .foregroundStyle(.secondary)
                 Text("\(Int(percent.rounded()))%")
-                    .font(.system(size: 11, weight: .semibold))
+                    .agentsFont(size: 11, weight: .semibold)
                     .monospacedDigit()
                 Spacer(minLength: 6)
                 if let resetsAt = window.resetsAt {
                     Text(isReset ? "초기화됨" : "\(AgentsStyle.until(resetsAt, now: now)) 초기화")
-                        .font(.system(size: 9))
+                        .agentsFont(size: 9)
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                         .fixedSize()
@@ -151,7 +151,7 @@ private struct WindowGauge: View {
             }
             .frame(height: 4)
         }
-        .frame(width: 124)
+        .agentsFrame(width: 124)
     }
 }
 
@@ -165,7 +165,7 @@ private struct LimitGauge: View {
         let percent = isReset ? 0 : window.usedPercent
         HStack(spacing: 4) {
             Text(AgentsStyle.windowName(minutes: window.windowMinutes))
-                .font(.system(size: 9.5))
+                .agentsFont(size: 9.5)
                 .foregroundStyle(.secondary)
                 .fixedSize()
             ZStack(alignment: .leading) {
@@ -175,9 +175,9 @@ private struct LimitGauge: View {
             }
             .frame(width: 30, height: 3)
             Text("\(Int(percent.rounded()))%")
-                .font(.system(size: 10.5, weight: .semibold))
+                .agentsFont(size: 10.5, weight: .semibold)
                 .monospacedDigit()
-                .frame(width: 30, alignment: .trailing)
+                .agentsFrame(width: 30, alignment: .trailing)
         }
         .help(help(now: now, isReset: isReset))
     }
@@ -201,14 +201,14 @@ private struct ClaudeLimitsCard: View {
                     GridRow {
                         if accounts.count > 1 || account.account != ".claude" {
                             Text(AgentsStyle.accountName(account.account))
-                                .font(.system(size: 9.5))
+                                .agentsFont(size: 9.5)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .fixedSize()
                         }
                         if account.limits.isEmpty {
                             Text("한도 정보 없음")
-                                .font(.system(size: 9.5))
+                                .agentsFont(size: 9.5)
                                 .foregroundStyle(.tertiary)
                                 .fixedSize()
                                 .gridCellColumns(2)
@@ -248,23 +248,23 @@ private struct ClaudeUsageCard: View {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         if accounts.count > 1 || account.account != ".claude" {
                             Text(AgentsStyle.accountName(account.account))
-                                .font(.system(size: 9.5))
+                                .agentsFont(size: 9.5)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                         Text(AgentsStyle.cost(account.todayCostUSD))
-                            .font(.system(size: 11, weight: .semibold))
+                            .agentsFont(size: 11, weight: .semibold)
                             .monospacedDigit()
                         if !compact {
                             Text(AgentsStyle.tokens(account.todayTokens))
-                                .font(.system(size: 9.5))
+                                .agentsFont(size: 9.5)
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
                     }
                     .fixedSize()
                     Text(blockText(account))
-                        .font(.system(size: 9))
+                        .agentsFont(size: 9)
                         .foregroundStyle(.tertiary)
                         .monospacedDigit()
                         .lineLimit(1)
@@ -302,11 +302,11 @@ private struct UsageCardTitle: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title)
-                .font(.system(size: 10, weight: .semibold))
+                .agentsFont(size: 10, weight: .semibold)
                 .foregroundStyle(AgentsStyle.color(kind))
             if let detail {
                 Text(detail)
-                    .font(.system(size: 9))
+                    .agentsFont(size: 9)
                     .foregroundStyle(.tertiary)
             }
         }
