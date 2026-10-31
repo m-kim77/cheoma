@@ -20,6 +20,10 @@ struct AgentsTab: View {
     /// `--render`에서 새 에이전트 · 설정 화면을 그릴 때 쓴다
     static var previewPane: AgentsPane?
     static let listWidth: CGFloat = 232
+    #if DEBUG
+    /// `--click-test`가 버튼이 눌렸는지 본다
+    static var debugPane: AgentsPane?
+    #endif
 
     var body: some View {
         let sessions = store.sessions
@@ -39,6 +43,9 @@ struct AgentsTab: View {
         // 글자 칸의 글자 · 커서 색이 시스템 밝은 모드를 따라 검게 되지 않도록
         .environment(\.colorScheme, .dark)
         .onChange(of: store.message) { _, message in show(message) }
+        #if DEBUG
+        .onChange(of: pane) { _, pane in Self.debugPane = pane }
+        #endif
         .onDisappear { model.keepsOpen = false }
     }
 

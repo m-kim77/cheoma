@@ -43,6 +43,10 @@ enum CheomaApp {
             return
         }
         #if DEBUG
+        if CommandLine.arguments.contains("--click-test") {
+            ClickTest.run()
+            return
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--render"), index + 1 < CommandLine.arguments.count {
             PreviewRenderer.run(outputDirectory: CommandLine.arguments[index + 1])
             return

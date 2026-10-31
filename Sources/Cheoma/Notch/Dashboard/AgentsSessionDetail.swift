@@ -155,6 +155,8 @@ struct AgentScreenPreview: View, Equatable {
                     .fixedSize()
                     .frame(width: width, height: height, alignment: .bottomLeading)
                     .clipped()
+                    // clipped()는 그림만 자르고 누르는 자리는 그대로라, 위로 넘친 긴 화면이 위쪽 버튼(터미널로 가기 · 새 에이전트 · 톱니 · 탭)을 덮어 클릭을 먹었다
+                    .allowsHitTesting(false)
                     .padding(Self.inset)
             }
             .accessibilityLabel("터미널 화면")

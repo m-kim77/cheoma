@@ -106,6 +106,8 @@
 - pi는 Node 스크립트인데 `process.title`을 "pi"로 바꿔서 실행 인자 자리가 "pi" 하나로 덮인다. 그래서 인터프리터의 argv[0]이 에이전트 이름이면 그 에이전트로 본다.
 - `devname()`(tty 장치 번호 → 이름)은 /dev를 훑어서 느리다. 3초마다 에이전트 15개에 부르니 대시보드가 닫혀 있을 때 CPU의 대부분이 여기였다 (1.2% → 0.7%). 이름은 기억해 둔다.
 - 훅: Claude Code는 이벤트 JSON을 stdin으로, Codex notify는 JSON을 마지막 인자로 준다. 훅 프로세스는 셸(`sh -c`)을 거쳐 뜨므로 부모를 몇 단계 올라가 에이전트 프로세스의 tty · pid를 찾고, 분산 알림(`DistributedNotificationCenter`)으로 앱에 넘긴다. Claude는 UserPromptSubmit · SessionStart 훅의 stdout을 대화에 넣으므로 아무것도 출력하지 않는다. Codex의 notify는 프로그램 하나만 받는다 (이 맥은 Codex Computer Use가 쓰고 있다).
+- SwiftUI `.clipped()`는 그림만 자르고 누르는 자리(hit test)는 자르지 않는다. 맨 아래에 맞춰 그리는 긴 터미널 미리보기가 위로 넘쳐서 위쪽 버튼들의 클릭을 먹었다 (10/31). 보기만 하는 큰 글자는 `.allowsHitTesting(false)`.
+- 노치 클릭은 `Cheoma --click-test`로 확인한다: 같은 패널을 화면 밖에 띄우고 `NSEvent.mouseEvent`를 `panel.sendEvent`로 바로 넣는다 (마우스 커서는 그대로). `--grid`는 버튼 둘레를 촘촘히, `--key`는 키 창이 될 수 있는 상태로. 실제로 터미널에 글자를 보내는 버튼(선택지 · 보내기)은 누르지 않는다.
 - Claude 구독 한도(5시간 · 주간)는 기록 파일에 없고 상태 줄 명령의 입력 JSON에만 있다: `rate_limits.five_hour/seven_day.used_percentage, resets_at`(초). 세션에서 첫 요청을 보내기 전에는 `rate_limits`가 아예 없다 (10/31 확인). 상태 줄 명령은 자주 불리는데 Cheoma 실행 파일은 처음만 0.4초, 그 뒤 0.01초.
 - Claude Code는 돌고 있는 프로세스마다 `<설정 폴더>/sessions/<pid>.json`을 적는다: sessionId, cwd, status(`idle` 입력 기다림 · `busy` 작업 중 · `waiting` 권한 묻기), statusUpdatedAt(ms). 어느 설정 폴더에 있는지로 계정도 안다. 같은 폴더에서 여러 세션을 띄워도 이걸로 구분한다.
 - 사용량: Codex 한도는 rollout 기록의 `token_count` 이벤트(rate_limits)에서, Claude 비용은 기록의 토큰 수와 cost-state로 배운 모델별 단가로 계산한다. 처음 읽기는 릴리스 빌드에서 약 0.3초(48시간치), 그 뒤로는 바뀐 부분만 읽어 약 12ms.
