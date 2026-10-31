@@ -18,7 +18,7 @@ struct TmuxPane: Hashable, Sendable {
 
 /// tmux 연동. 사용자가 직접 띄운 세션도 보이도록 기본 tmux 서버를 쓴다.
 /// 앱은 PATH가 짧은 GUI 프로세스라 tmux를 알려진 위치에서 찾고, 명령마다 2초 안에 끝나지 않으면 끊는다
-final class TmuxBridge: TerminalBridge {
+final class TmuxBridge: TerminalBridge, Sendable {
     static let shared = TmuxBridge()
     /// Cheoma가 띄운 세션 이름의 앞부분
     static let sessionPrefix = "cheoma-"

@@ -96,6 +96,18 @@
 - 노치 패널은 키보드 입력을 받지 않아서, 숫자는 직접 그린 슬라이더와 그래프 끌기로 바꾼다. 시스템 슬라이더(NSSlider)는 `--render`(ImageRenderer)에서 노란 금지 표시로만 나온다.
 - SwiftUI `Text("\(정수) RPM")`은 지역 설정에 따라 "2,800"처럼 쉼표가 들어간다. 숫자는 `String`으로 만들어서 넘긴다.
 
+## 코드 에이전트 (에이전트 탭)
+
+- 화면은 tmux `capture-pane -p -e`(색 코드 포함)로, Terminal.app은 AppleScript `contents`(글자만)로 읽는다. 상태는 화면 맨 아래만 본다: 위쪽 대화 기록에도 번호 목록이나 지난 질문이 남아 있기 때문이다. 번호 목록은 커서(❯ › →)가 있거나 바로 아래에 "Enter to …/Esc to cancel" 안내가 있을 때만 선택지로 본다.
+- 고르는 법: Claude Code와 Codex 모두 번호 글자 하나만 보내면 바로 골라진다 (Enter를 같이 보내면 다음 질문까지 넘어갈 수 있다). Claude의 폴더 신뢰 창과 pi 모델 목록은 번호가 없어서 화살표로 옮긴 뒤 Enter (tmux만 된다).
+- Codex(와 Claude Code)는 글자가 한꺼번에 들어오면 붙여넣기로 보고 바로 뒤의 Enter를 줄바꿈으로 받는다. 글자를 보낸 뒤 0.15초 쉬고 Enter를 보낸다 (`TmuxBridge.send`). 쉬지 않으면 입력창에 글자만 남는다 (10/31 직접 확인).
+- 작업 중 표시: Claude · Codex는 "esc to interrupt", pi는 점자 스피너 다음 "Working", OpenCode는 "esc interrupt". Claude의 스피너 줄은 처음 1초쯤 괄호 없이 "· Warping…"만 나온다.
+- Codex 입력창의 회색 예시 글("› Summarize recent commits")은 흐린 글씨(SGR 2)로만 사용자가 친 글과 구분된다. Terminal.app은 색을 못 읽어서 구분할 수 없다 (상태는 어차피 '입력 기다림'이라 상관없다).
+- pi는 Node 스크립트인데 `process.title`을 "pi"로 바꿔서 실행 인자 자리가 "pi" 하나로 덮인다. 그래서 인터프리터의 argv[0]이 에이전트 이름이면 그 에이전트로 본다.
+- `devname()`(tty 장치 번호 → 이름)은 /dev를 훑어서 느리다. 3초마다 에이전트 15개에 부르니 대시보드가 닫혀 있을 때 CPU의 대부분이 여기였다 (1.2% → 0.7%). 이름은 기억해 둔다.
+- 훅: Claude Code는 이벤트 JSON을 stdin으로, Codex notify는 JSON을 마지막 인자로 준다. 훅 프로세스는 셸(`sh -c`)을 거쳐 뜨므로 부모를 몇 단계 올라가 에이전트 프로세스의 tty · pid를 찾고, 분산 알림(`DistributedNotificationCenter`)으로 앱에 넘긴다. Claude는 UserPromptSubmit · SessionStart 훅의 stdout을 대화에 넣으므로 아무것도 출력하지 않는다. Codex의 notify는 프로그램 하나만 받는다 (이 맥은 Codex Computer Use가 쓰고 있다).
+- 사용량: Codex 한도는 rollout 기록의 `token_count` 이벤트(rate_limits)에서, Claude 비용은 기록의 토큰 수와 cost-state로 배운 모델별 단가로 계산한다. 처음 읽기는 릴리스 빌드에서 약 0.3초(48시간치), 그 뒤로는 바뀐 부분만 읽어 약 12ms.
+
 ## 성능
 
 `Cheoma --bench [초] [탭]`으로 잰다. CPU 사용률과 함께 초당 그래프를 그린 횟수, 창 배치(NSHostingView.layout) 횟수를 찍는다. 릴리스 빌드 기준:

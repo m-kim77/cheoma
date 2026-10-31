@@ -27,7 +27,7 @@ enum AutomationPermission: Equatable, Sendable {
 /// NSAppleScript는 메인 스레드에서만 써야 해서, 백그라운드 큐에서 부르는 이 연동은 /usr/bin/osascript를 따로 띄운다.
 /// osascript가 보내는 Apple Event도 macOS는 띄운 앱(Cheoma)이 보낸 것으로 보고 Cheoma의 자동화 권한을 쓴다.
 /// Terminal이 꺼져 있으면 `tell application`이 Terminal을 켜 버리므로, 새 창을 여는 openTab 말고는 먼저 켜져 있는지 본다
-final class TerminalAppBridge: TerminalBridge {
+final class TerminalAppBridge: TerminalBridge, Sendable {
     static let shared = TerminalAppBridge()
     static let bundleIdentifier = "com.apple.Terminal"
 

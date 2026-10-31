@@ -1,7 +1,7 @@
 import Foundation
 
 /// `Cheoma --agents`: 찾은 에이전트 프로세스와 터미널 위치·상태를 출력한다 (개발용).
-/// `--capture`를 붙이면 에이전트가 도는 tmux 패널의 마지막 줄도 보여준다. `--selftest`는 연동 모듈 자체 확인.
+/// `--capture`를 붙이면 에이전트가 도는 tmux 패널의 마지막 줄과 화면 분석 결과도 보여준다. `--selftest`는 연동 모듈 자체 확인.
 /// Terminal에는 Apple Event를 보내지 않는다 (켜져 있는지만 본다): 아무도 보지 않는 권한 창이 뜨지 않게
 enum AgentsDump {
     static func run() {
@@ -54,6 +54,13 @@ enum AgentsDump {
             do {
                 let screen = try tmux.capture(.tmux(paneID: pane.paneID, tty: pane.tty))
                 print(ANSIText.plain(screen.text).split(separator: "\n", omittingEmptySubsequences: false).suffix(15).joined(separator: "\n"))
+                let kind = agents.first { $0.tty == pane.tty }?.kind ?? .claude
+                let analysis = AgentScreenParser.analyze(screen, kind: kind)
+                print("→ \(analysis.state.title)" + (analysis.question.map { " · \($0)" } ?? ""))
+                for choice in analysis.choices {
+                    print("   \(choice.isHighlighted ? "▶" : " ") \(choice.key.isEmpty ? "↕" : choice.key)  \(choice.label)")
+                }
+                if let summary = analysis.summary { print("   요약 \(summary)") }
             } catch {
                 print("  오류: \(error.localizedDescription)")
             }

@@ -161,7 +161,7 @@ struct JSONBytes {
     func string(_ range: Range<Int>, maxBytes: Int = .max) -> String? {
         guard isString(range) else { return nil }
         let start = range.lowerBound + 1
-        let stop = min(range.upperBound - 1, start + maxBytes)
+        let stop = start + min(range.upperBound - 1 - start, maxBytes)
         guard stop > start else { return "" }
         let raw = UnsafeBufferPointer(start: base + start, count: stop - start)
         if memchr(base + start, Int32(Self.backslash), stop - start) == nil {

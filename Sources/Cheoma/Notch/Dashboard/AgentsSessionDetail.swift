@@ -71,7 +71,7 @@ struct AgentsSessionDetail: View {
             ForEach(choices, id: \.self) { choice in
                 Button { store.choose(choice, in: session.id) } label: {
                     HStack(spacing: 7) {
-                        Text(choice.key)
+                        Text(choice.key.isEmpty ? "›" : choice.key)
                             .font(.system(size: 9.5, weight: .bold, design: .monospaced))
                             .foregroundStyle(choice.isHighlighted ? Color.black : Color.white.opacity(0.75))
                             .frame(minWidth: 16, minHeight: 16)

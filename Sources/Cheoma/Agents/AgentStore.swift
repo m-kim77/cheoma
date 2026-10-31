@@ -89,11 +89,11 @@ final class AgentStore: ObservableObject {
     func start() {
         guard timer == nil else { return }
         observeHooks()
-        queue.async { [weak self] in
+        queue.async {
             let tmux = TmuxBridge.shared.executable != nil
             let installed = Self.findInstalledAgents()
             let hooks = HookInstaller.status()
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
                     self?.isTmuxAvailable = tmux
                     self?.installedAgents = installed
@@ -141,8 +141,23 @@ final class AgentStore: ObservableObject {
     /// 화면의 선택지를 고른다
     func choose(_ choice: AgentChoice, in id: AgentSession.ID) {
         guard let session = session(id) else { return }
+        guard choice.key.isEmpty else {
+            perform(on: session) { bridge, location in
+                try bridge.send(text: choice.key, pressEnter: choice.needsEnter, to: location)
+            }
+            return
+        }
+        // 번호 없는 목록: 커서에서 고른 줄까지 화살표로 옮긴 뒤 Enter (tmux만)
+        guard session.location.canSendKeys else {
+            show(message: "이 목록은 화살표로 골라야 해서 터미널에서 직접 골라 주세요")
+            return
+        }
+        let choices = session.analysis?.choices ?? []
+        guard let target = choices.firstIndex(of: choice) else { return }
+        let current = choices.firstIndex { $0.isHighlighted } ?? 0
+        let moves = [TerminalKey](repeating: target > current ? .down : .up, count: abs(target - current))
         perform(on: session) { bridge, location in
-            try bridge.send(text: choice.key, pressEnter: choice.needsEnter, to: location)
+            for key in moves + [.enter] { try bridge.send(key: key, to: location) }
         }
     }
 
@@ -165,10 +180,10 @@ final class AgentStore: ObservableObject {
     /// 새 tmux 세션에서 에이전트를 띄운다
     func launch(_ kind: AgentKind, in folder: String) {
         remember(folder: folder)
-        queue.async { [weak self] in
+        queue.async {
             do {
                 let location = try TmuxBridge.shared.launch(kind, in: folder)
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
                     MainActor.assumeIsolated {
                         guard let self else { return }
                         if case .tmux(let paneID, _) = location {
@@ -180,8 +195,9 @@ final class AgentStore: ObservableObject {
                     }
                 }
             } catch {
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated { self?.show(message: error.localizedDescription) }
+                let message = error.localizedDescription
+                DispatchQueue.main.async { [weak self] in
+                    MainActor.assumeIsolated { self?.show(message: message) }
                 }
             }
         }
@@ -189,10 +205,10 @@ final class AgentStore: ObservableObject {
 
     /// Terminal 자동화 권한을 묻는다 (사용자가 버튼을 눌렀을 때만). macOS가 묻는 창이 뜬다
     func requestTerminalAccess() {
-        queue.async { [weak self] in
+        queue.async {
             let bridge = TerminalAppBridge.shared
             let permission: AutomationPermission = bridge.isRunning ? bridge.permission(askIfNeeded: true) : .targetNotRunning
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     self.terminalPermission = permission
@@ -265,9 +281,9 @@ final class AgentStore: ObservableObject {
             readUsage: readUsage)
         // 읽기 도구는 이 큐에서만 쓰므로 넘겨도 안전하다
         let reader = Unchecked(usageReader)
-        queue.async { [weak self] in
+        queue.async {
             let result = Self.collect(plan, usageReader: reader.value)
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     self.isPolling = false
@@ -367,7 +383,7 @@ final class AgentStore: ObservableObject {
             switch event.name {
             case "Notification":
                 return event.notificationType == "permission_prompt" ? .needsChoice : .needsInput
-            case "Stop", "StopFailure": return .needsInput
+            case "Stop", "StopFailure", "agent-turn-complete": return .needsInput
             case "UserPromptSubmit": return .working
             default: break
             }
@@ -406,8 +422,9 @@ final class AgentStore: ObservableObject {
         hookObserver = DistributedNotificationCenter.default().addObserver(
             forName: AgentHooks.notificationName, object: nil, queue: .main
         ) { [weak self] notification in
+            let event = AgentHooks.event(from: notification)
             MainActor.assumeIsolated {
-                guard let event = AgentHooks.event(from: notification) else { return }
+                guard let event else { return }
                 self?.receive(event)
             }
         }
@@ -437,7 +454,7 @@ final class AgentStore: ObservableObject {
 
     /// 터미널에 무언가 하고, 바로 화면을 다시 읽는다
     private func perform(on session: AgentSession, refresh: Bool = true,
-                         _ work: @escaping (TerminalBridge, TerminalLocation) throws -> Void) {
+                         _ work: @escaping @Sendable (TerminalBridge, TerminalLocation) throws -> Void) {
         let location = session.location
         guard let bridge = Self.bridge(for: location) else {
             show(message: "이 세션은 보기만 할 수 있어요. 답은 그 앱에서 해 주세요")
@@ -449,10 +466,15 @@ final class AgentStore: ObservableObject {
         }
         let id = session.id
         let target = Unchecked(bridge)
-        queue.async { [weak self] in
-            var failure: String?
-            do { try work(target.value, location) } catch { failure = error.localizedDescription }
-            DispatchQueue.main.async {
+        queue.async {
+            let failure: String?
+            do {
+                try work(target.value, location)
+                failure = nil
+            } catch {
+                failure = error.localizedDescription
+            }
+            DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     if let failure { self.show(message: failure) }
@@ -467,12 +489,12 @@ final class AgentStore: ObservableObject {
         }
     }
 
-    private func changeHooks(_ work: @escaping (HookInstaller.Status) throws -> String) {
-        queue.async { [weak self] in
-            var text: String
+    private func changeHooks(_ work: @escaping @Sendable (HookInstaller.Status) throws -> String) {
+        queue.async {
+            let text: String
             do { text = try work(HookInstaller.status()) } catch { text = error.localizedDescription }
             let status = HookInstaller.status()
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
                     self?.hookStatus = status
                     self?.show(message: text)

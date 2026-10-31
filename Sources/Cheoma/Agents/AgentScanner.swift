@@ -86,6 +86,11 @@ enum AgentScanner {
                     if module == "aider" || module.hasPrefix("aider.") { return .aider }
                 }
             }
+            // process.title을 바꾼 CLI (pi): 인자 자리가 "pi" 하나로 덮여서 스크립트 경로가 안 보인다
+            if let title = arguments.first.map({ ($0 as NSString).lastPathComponent }), let kind = nativeNames[title],
+               kind != .aider, !lowered.hasPrefix("python") {
+                return kind
+            }
             while let first = rest.first, first.hasPrefix("-") { rest = rest.dropFirst() }
             guard let script = rest.first else { return nil }
             if let marker = scriptMarkers.first(where: { script.contains($0.0) }) { return marker.1 }
@@ -161,6 +166,24 @@ enum AgentScanner {
         return nil
     }
 
+    /// 훅 프로세스를 띄운 에이전트: 부모를 거슬러 올라가 처음 만나는 에이전트 프로세스의 pid와 tty.
+    /// 훅은 보통 셸(`sh -c`)을 거쳐 뜨므로 몇 단계만 본다. 에이전트를 못 찾으면 tty가 있는 가장 가까운 조상이라도 준다
+    static func launchingAgent(of pid: pid_t = getpid()) -> (pid: pid_t, tty: String?)? {
+        var current = shortInfo(pid)?.ppid ?? 0
+        var fallback: (pid: pid_t, tty: String?)?
+        for _ in 0..<8 {
+            guard current > 1, let entry = shortInfo(current) else { break }
+            let tty = bsdInfo(current).flatMap { ttyPath($0.e_tdev) }
+            if isCandidate(entry.name),
+               kind(executablePath: executablePath(of: current), arguments: arguments(of: current) ?? []) != nil {
+                return (current, tty)
+            }
+            if fallback == nil, tty != nil { fallback = (current, tty) }
+            current = entry.ppid
+        }
+        return fallback
+    }
+
     // MARK: - libproc
 
     /// 모든 프로세스에서 읽는 짧은 정보 (PROC_PIDT_SHORTBSDINFO). 긴 BSD 정보와 달리 root 프로세스(login 등)도 읽혀서
@@ -222,14 +245,23 @@ enum AgentScanner {
     /// e_tdev → "/dev/ttys004". 제어 터미널이 없으면(NODEV) nil
     private static func ttyPath(_ tdev: UInt32) -> String? {
         guard tdev != UInt32.max, tdev != 0 else { return nil }
+        ttyLock.lock()
+        defer { ttyLock.unlock() }
+        if let cached = ttyNames[tdev] { return cached }
+        // devname은 /dev를 훑어서 느리다 (3초마다 에이전트 수만큼 부르면 CPU 대부분이 여기). 장치 번호의 이름은 바뀌지 않으니 기억해 둔다
         guard let name = devname(dev_t(bitPattern: tdev), S_IFCHR) else { return nil }
         let text = String(cString: name)
-        return text.isEmpty || text == "??" ? nil : "/dev/" + text
+        let path = text.isEmpty || text == "??" ? nil : "/dev/" + text
+        if let path { ttyNames[tdev] = path }
+        return path
     }
+
+    private static let ttyLock = NSLock()
+    nonisolated(unsafe) private static var ttyNames: [UInt32: String] = [:]
 
     /// 실행 인자(KERN_PROCARGS2)를 읽을 버퍼. 크기를 물으면 kern.argmax(1MB)가 나와서 매번 만들지 않고 하나를 같이 쓴다
     private static let argumentsLock = NSLock()
-    private static var argumentsBuffer = [UInt8]()
+    nonisolated(unsafe) private static var argumentsBuffer = [UInt8]()
 
     /// 실행 인자 전부. 다른 계정이거나 이미 끝난 프로세스면 nil
     private static func arguments(of pid: pid_t) -> [String]? {

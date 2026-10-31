@@ -3,16 +3,17 @@
 작업이 끝날 때마다 갱신한다. "지금 상태"와 "남은 일"은 그때그때 고쳐 쓰고, 한 일은 "작업 기록"에 날짜별로 쌓는다.
 사용법은 [README](../README.md), 만들면서 알아낸 기술적인 내용은 [NOTES.md](NOTES.md), 배포 계획은 [DISTRIBUTION.md](DISTRIBUTION.md)에 있다.
 
-마지막 갱신: 2026-10-31 13:45
+마지막 갱신: 2026-10-31 14:20
 
 ## 지금 상태
 
 - 요청한 기능은 모두 들어가 있다: 노치 알림·경고 알림, 노치 대시보드(개요·그래프·전력·온도·팬·앱), 가려진 메뉴바 아이콘 패널, 팬 조절(자동 · 고정: 팬별 RPM·저장·멈춤 · 온도별: 온도-RPM 커브).
+- 에이전트 탭(코드 에이전트 보기·답하기)은 `agents` 브랜치에서 다 만들었고 10/31 14:20에 그 빌드를 `~/Applications/Cheoma.app`에 설치했다. main에는 아직 안 합쳤다 (써 보고 합친다).
 - 이름: **Cheoma(처마)**. 번들 ID `io.github.m-kim77.cheoma`, 라이선스 GPL-3.0, 저장소 `github.com/m-kim77/cheoma` (2026-10-30 v0.1.0 베타와 함께 공개).
 - 방향: 포트폴리오 겸 무료 배포. GitHub에 공개하고 추가 비용은 쓰지 않는다. Developer ID는 나중에 정한다 (2026-10-29 결정). 배포에 필요한 것은 [DISTRIBUTION.md](DISTRIBUTION.md)에 정리했다.
 - 10/29 15:55에 Cheoma로 새로 빌드해서 `~/Applications/Cheoma.app`에 설치했다. 예전 설정·그래프 기록·메뉴바 아이콘 위치는 옮겨 왔다. 예전 NotchBar.app은 휴지통으로 옮겼다.
-- CPU 사용량: 대시보드가 닫혀 있으면 약 0.3%, 대부분의 탭은 약 1~1.5%, 그래프 탭 1분 구간은 4.7% (흐르는 그래프 네 개를 초당 6번 그린다). v0.1.0의 그래프 탭은 110%였다 (10/31에 고침). 자세한 건 [NOTES.md](NOTES.md)의 성능.
-- 10/30 점검에서 나온 문제 중 "꼭 고칠 것" 여섯 개와 "고치면 좋은 것"을 10/31에 고쳤다. 남은 것과 실제 기기에서 확인할 것은 [ISSUES.md](ISSUES.md)에 있다. 단위 테스트 28개(`scripts/test.sh`).
+- CPU 사용량: 대시보드가 닫혀 있으면 약 0.3% (에이전트 탭이 들어간 빌드는 에이전트 15개를 지켜보면서 약 0.7~0.8%), 대부분의 탭은 약 1~1.5%, 그래프 탭 1분 구간은 4.7% (흐르는 그래프 네 개를 초당 6번 그린다). v0.1.0의 그래프 탭은 110%였다 (10/31에 고침). 자세한 건 [NOTES.md](NOTES.md)의 성능.
+- 10/30 점검에서 나온 문제 중 "꼭 고칠 것" 여섯 개와 "고치면 좋은 것"을 10/31에 고쳤다. 남은 것과 실제 기기에서 확인할 것은 [ISSUES.md](ISSUES.md)에 있다. 단위 테스트 49개(`scripts/test.sh`).
 - 팬 조절은 이 맥(M5 Max)에서 동작한다: 고정 RPM, 팬별 속도, 온도별, 멈춤 모두 8초 확인에서 실패가 없었다.
 - 실제 기기에서 아직 확인하지 못한 것
   - 10/31 수정분 (팬 도우미 v4, 가려진 아이콘 다시 숨기기, 노치 없는 화면의 전체화면): [ISSUES.md](ISSUES.md)의 "실제 기기에서 확인할 것".
@@ -37,11 +38,17 @@
 | FPS | 한계 | 다른 앱의 FPS는 공개 API가 없어 화면 최대 주사율만 보여준다 |
 | .app 설치, 로그인 시 자동 실행 | 완료 | 자동 실행은 꺼져 있다 (`⌄` 우클릭 메뉴에서 켬) |
 | 배포 | v0.1.0 베타 | 이름 Cheoma, GPL-3.0. README 영어·한국어(설치·업데이트·지우기·문제 해결, 스크린샷). 2026-10-30 GitHub Releases에 v0.1.0(베타, ad-hoc 서명)을 올리고 저장소를 공개했다. 서명·공증 스크립트는 Developer ID를 쓸 때를 위해 남겨 둔다 |
+| 대시보드 › 에이전트 | 완료 (`agents` 브랜치) | Claude Code · Codex · pi · OpenCode 세션 목록과 상태(작업 중 · 선택 기다림 · 입력 기다림), 화면 미리보기, 선택지 고르기, 답 보내기, 새 에이전트를 tmux로 실행, Codex 한도 · Claude 비용, 훅. tmux 세션은 다 되고, Terminal.app 탭은 글자+Enter만 된다 |
 | 디자인 | 테마 2개 | `⌄` 우클릭 › 노치 모양: **기본**(둥근 네모, 기본값), **광화문**(사진에서 잰 비례와 처마 곡선의 검은 실루엣, 석축 안에 대시보드, 홍예문 세 개). 다른 시안은 캔버스에 있다. 앱 아이콘: 밤하늘 위 처마 마크(끝 들림), `design/icon/` |
 
 ## 남은 일
 
 ### 직접 해야 하는 것
+
+0. **에이전트 탭 써 보기** (설치된 앱): 노치 › 에이전트. 처음엔 설정(톱니)에서
+   - "Terminal 연결"을 눌러 자동화 권한을 준다 (Terminal.app 탭의 화면을 읽고 답하려면 필요. tmux 세션은 필요 없다)
+   - "Claude Code 연결"(훅 설치)을 누르면 `~/.claude/settings.json`, `~/.claude-account2/settings.json`에 Cheoma 훅이 들어간다 (처음 고칠 때 `settings.json.cheoma-backup`을 남긴다). 이 맥의 Codex는 notify를 Codex Computer Use가 쓰고 있어서 건드리지 않는다
+   - 써 보고 괜찮으면 `agents` 브랜치를 main에 합친다 (README에 에이전트 탭 설명도 넣어야 한다)
 
 1. **10/31 수정분 확인**: [ISSUES.md](ISSUES.md)의 "실제 기기에서 확인할 것" 중 남은 것 (잠자기 뒤 팬 유지, 가려진 아이콘 다시 숨기기, 전체화면). 새 빌드 설치·손쉬운 사용 권한·도우미 v4는 10/31에 끝났다.
 2. **팬 도우미 바꾸기**: 예전 이름의 도우미(`com.notchbar.fanhelper`)를 지우고, 팬 탭에서 새 도우미를 설치한다. 지우는 명령은 아래 "작업 기록" 이 날짜 항목에 있다.
@@ -67,29 +74,32 @@
 - 앱 탭은 내 계정 프로세스만 보인다. WindowServer, kernel_task 같은 시스템 프로세스는 권한이 없어 빠진다 (이 맥에서는 1004개 중 637개를 읽을 수 있었다).
 - 앱 탭의 "CPU 전력"은 CPU 몫만 추정한 값이다. GPU를 많이 쓰는 앱(게임, LLM)은 실제보다 작게 나온다.
 
-## 이어서 할 일: 에이전트 탭
+## 에이전트 탭 (agents 브랜치)
 
-노치에 코드 에이전트(Claude Code · Codex · OpenCode · pi) 탭을 넣는 중이다. 사용자가 고른 방식: **Terminal.app + tmux**, 첫 버전에 목록·상태·알림, 미리보기·답·선택지, 새 에이전트 실행, 사용량을 모두 넣는다.
+노치에 코드 에이전트(Claude Code · Codex · OpenCode · pi) 탭. 사용자가 고른 방식: **Terminal.app + tmux**, 첫 버전에 목록·상태·알림, 미리보기·답·선택지, 새 에이전트 실행, 사용량을 모두 넣는다.
 
-- 2026-10-31에 WIP 브랜치 4개(`agents-bridges` · `agents-parser` · `agents-usage` · `agents-ui`)를 `agents`에 합쳤다. 충돌 없음, 빌드·경고 0, 단위 테스트 28개 통과.
-- 된 것
-  - `AgentStore`(세션 찾기·상태 판단·알림·보내기·실행), 알림 → 에이전트 탭 열기, Apple Events entitlement
-  - 프로세스 찾기(`AgentScanner`, 이 맥에서 15개를 25ms에), `TerminalAppBridge`, `TmuxBridge`. `Cheoma --agents`, `--agents --selftest` 모두 통과
-  - 에이전트 탭 화면(목록·상세·선택지·답 입력·새 에이전트·설정·사용량 줄): `--render`의 미리보기 데이터로 기본·광화문 테마 모두 그려지고 넘침 없음
-  - Codex 기록(`CodexRollouts`)과 Claude 기록(`ClaudeTranscripts`) 읽기, 가벼운 JSON 읽기(`JSONBytes`)
-- 남은 것
-  - 화면 파서: `AgentScreenParser`, `ANSIText`, `--parse-screen`은 아직 틀이다. 실제 화면 39개가 `scripts/agent-screens/`에 있다
-  - 사용량: `--usage`가 아직 "준비 중"을 찍는다 (`UsageDump`). 기록 읽기와 화면 연결 확인 필요
-  - 훅: `AgentHooks`, `HookInstaller`가 틀이다 (Claude Notification·Stop 훅으로 상태를 바로 받기)
-  - 실제 Terminal.app · tmux 세션으로 보내기·선택지 고르기·새 에이전트 실행 확인, 앱에 넣어 설치
-- 계약은 `AgentModels.swift`와 각 틀 파일의 주석이다.
+- 모듈: `AgentScanner`(프로세스 찾기, libproc), `TerminalAppBridge`(osascript), `TmuxBridge`, `AgentScreenParser` · `ANSIText`(화면 읽기), `AgentUsageReader`(기록 파일), `AgentHooks` · `HookInstaller`(훅), `AgentStore`(상태 판단 · 알림 · 보내기), 화면은 `Notch/Dashboard/Agents*.swift`. 계약은 `AgentModels.swift`.
+- 개발용 명령: `Cheoma --agents [--capture]`(찾은 세션, tmux 화면과 분석 결과), `--agents --selftest`, `--parse-screen <파일|폴더>`(`scripts/agent-screens/`의 실제 화면 39개), `--usage`(사용량 · 최근 세션 · 훅 상태)
+- 실제로 확인한 것 (10/31, tmux): Claude Code · Codex · pi 모두 폴더 신뢰 → 입력 기다림 → 작업 중 → 권한 묻기 → 고르기 → 끝남까지 화면 분석이 맞았고, 번호 선택지는 글자 하나(Enter 없이)로, 번호 없는 목록은 화살표 + Enter로 골라졌다. Claude 훅(SessionStart · UserPromptSubmit · Notification permission_prompt · Stop)과 Codex notify가 tty · pid와 함께 도착했다 (실제 설정은 건드리지 않고 `--settings` · `-c notify=`로 그 세션에만 넣어서 시험)
+- 아직 실제로 못 본 것
+  - Terminal.app 탭에서 읽기·보내기: 자동화 권한을 줘야 해서 (위 "직접 해야 하는 것")
+  - 노치에서 직접 누르기 (선택지 버튼, 답 입력, 새 에이전트, 훅 설치 버튼): 화면 기록 권한이 없어 `--render` 그림으로만 봤다
+  - OpenCode 실제 세션: 이 맥에 공급자가 연결돼 있지 않아 작업 화면을 못 봤다 (입력 기다림만 확인)
 - 원래 워크트리(`.claude/worktrees/`)에는 에이전트 탭과 상관없는, 커밋하지 않은 작업이 있는 것들이 있다 (`055ba92` 위: 잠자기 방지 단축키, GPU 앱 사용량, 타이머 탭, 장치 이벤트). 지우지 말 것.
-- 확인한 사실: Codex 기록(`~/.codex/sessions/**/rollout-*.jsonl`)의 `token_count` 이벤트에 5시간·주간 사용 %가 있다. Claude의 남은 한도는 문서상 statusLine 입력의 `rate_limits`(five_hour, seven_day)로만 받을 수 있다. Claude 훅 Notification에는 `notification_type`(permission_prompt ~6초 뒤, idle_prompt ~60초 뒤)이 있고, Stop에는 `last_assistant_message`가 있다. `claude agents --json`도 세션 상태를 준다 (대화형 세션이 보이는지는 시험 필요).
-- Terminal.app은 `do script`가 늘 Enter를 같이 보내고 특수 키는 못 보낸다. tmux는 다 된다. Terminal 자동화 권한은 사용자가 버튼을 눌렀을 때만 묻는다.
+- 알아낸 사실은 [NOTES.md](NOTES.md)의 "코드 에이전트".
 
 ## 작업 기록
 
 ### 2026-10-31
+
+- 14:20 에이전트 탭 마무리, `agents` 빌드를 설치:
+  - 화면 파서와 ANSI 색: 번호 선택지(커서 · 안내 줄이 있어야 진짜 메뉴, 대화 기록 속 번호 목록은 무시), 번호 없는 목록(화살표로 고름), `[y/N]` 질문, 작업 중 표시(esc to interrupt, 점자 스피너), 입력창, 요약 줄. 실제 화면 39개 모두 맞음, 릴리스 빌드에서 화면 하나 0.6ms 이하
+  - 사용량: `--usage`. 긴 문자열을 읽을 때 `start + Int.max`가 넘쳐서 앱이 죽던 문제를 고침 (`JSONBytes.string`)
+  - 훅: `--agent-event`(Claude 훅 stdin, Codex notify 인자 → 분산 알림), 설치기(Claude settings.json에 합쳐 넣기 · 빼기 · 백업, Codex는 notify가 비었을 때만). 앱이 지워져도 에이전트가 오류를 안 내게 `[ -x … ]`로 감싼다
+  - pi가 안 보이던 문제: Node의 `process.title`이 인자를 "pi"로 덮어서 스크립트 경로가 안 보였다
+  - CPU: 대시보드 닫힘에서 1.2% → 0.7%. `devname()`이 /dev를 훑어서 느렸다 (tty 이름을 기억)
+  - `-strict-concurrency=complete` warning 20개(에이전트 코드) → 0
+  - 테스트 21개 추가 (화면 분석, 훅 입력, 설치기를 임시 홈 폴더에서) → 49개
 
 - 13:45 에이전트 탭: WIP 브랜치 4개를 `agents`에 합침. 빌드 오류는 `JSONBytes`의 `Darwin.stat(...)`이 구조체 생성자로 해석된 것 하나뿐이라 `fstatat`으로 바꿈. `AgentScanner`에 남아 있던 시간 측정 출력을 지움. `--agents --selftest` 통과, `--render`로 에이전트 탭 7가지 상태를 두 테마로 그려 확인
 

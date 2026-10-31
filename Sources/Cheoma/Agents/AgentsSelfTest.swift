@@ -5,7 +5,7 @@ import Foundation
 /// osascript는 앱을 부르지 않는 순수 AppleScript로만 돌린다.
 /// tmux는 따로 띄운 테스트 서버(-S 소켓)에서 진짜로 돌려 보고 끝나면 서버째 지운다. 사용자의 tmux 서버는 건드리지 않는다
 enum AgentsSelfTest {
-    private static var failures = 0
+    nonisolated(unsafe) private static var failures = 0
 
     static func run() -> Bool {
         failures = 0
@@ -49,6 +49,8 @@ enum AgentsSelfTest {
             ("/opt/homebrew/Cellar/opencode/2.1.0/bin/opencode", ["opencode"], .opencode),
             ("/opt/homebrew/Cellar/node/24.1.0/bin/node",
              ["/opt/homebrew/opt/node/bin/node", "/opt/homebrew/Cellar/pi-coding-agent/1.3.0/libexec/bin/pi"], .pi),
+            // pi는 process.title을 "pi"로 바꿔서 인자가 덮인다
+            ("/opt/homebrew/Cellar/node/25.2.1/bin/node", ["pi"], .pi),
             ("/opt/homebrew/bin/node", ["node", "--no-warnings", "/opt/homebrew/lib/node_modules/@google/gemini-cli/dist/index.js"], .gemini),
             ("/opt/homebrew/bin/node", ["node", "/opt/homebrew/bin/gemini"], .gemini),
             ("/Users/me/.local/share/uv/tools/aider-chat/bin/python3.12", ["python3", "/Users/me/.local/bin/aider"], .aider),
