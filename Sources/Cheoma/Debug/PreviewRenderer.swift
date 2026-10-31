@@ -37,7 +37,7 @@ enum PreviewRenderer {
         let alerts = [NotchAlert(symbol: "bolt.fill", tint: .green, text: "충전 중 90%"),
                       WarningAlerts.thermal(.critical), WarningAlerts.memory(.critical), WarningAlerts.battery(level: 10)]
         for (index, alert) in alerts.compactMap({ $0 }).enumerated() {
-            model.show(alert)
+            model.previewAlert(alert)
             render(NotchView(model: model, stats: stats, fans: fans), to: folder.appendingPathComponent("alert-\(index).png"))
         }
 

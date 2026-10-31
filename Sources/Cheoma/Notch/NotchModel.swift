@@ -112,6 +112,11 @@ final class NotchModel: ObservableObject {
         isOpen = true
     }
 
+    /// 미리보기 렌더링용: 차례를 건너뛰고 바로 띄운다
+    func previewAlert(_ alert: NotchAlert) {
+        self.alert = alert
+    }
+
     /// 알림 칸은 하나다. 경고는 정보성 알림을 밀어내고 바로 뜨고, 정보성 알림은 경고가 끝날 때까지 기다린다.
     /// 경고끼리는 차례로 띄운다. 정보성 알림끼리는 새 것이 바로 바꾼다 (충전기를 꽂았다 뺐을 때처럼 마지막 상태가 중요하다)
     func show(_ alert: NotchAlert) {
