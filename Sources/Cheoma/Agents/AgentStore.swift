@@ -71,6 +71,8 @@ final class AgentStore: ObservableObject {
     private static let recentFoldersKey = "agents.recentFolders"
     /// 같은 세션에 같은 알림을 다시 띄우지 않는 시간
     private static let alertCooldown: TimeInterval = 20
+    /// 이만큼은 일하다 멈춰야 '끝났어요'를 알린다 (출력이 잠깐 멈춘 것에 울리지 않게)
+    private static let minimumWork: TimeInterval = 4
     /// 사라진 세션을 '끝남'으로 남겨 두는 시간
     private static let exitedLinger: TimeInterval = 30
 
@@ -393,21 +395,33 @@ final class AgentStore: ObservableObject {
         }
     }
 
-    /// 화면 → 훅 → 출력 활동 순서로 판단한다
+    /// Claude Code는 스스로 적는 상태, 나머지는 화면 → 훅 → 출력 활동 순서로 판단한다
     private func decideState(_ session: AgentSession, item: PollItem, now: Date) -> AgentState {
         guard item.hasAgentProcess else { return .exited }
+        // Claude Code가 적는 상태는 한 차례 내내 busy로 남는다. 화면이나 출력으로 보면 도구를 돌리는 사이마다
+        // 입력창만 보이거나 출력이 멈춰서 작업 중 ↔ 입력 기다림을 오갔다. 화면은 선택지가 떠 있는지만 본다
+        if let status = item.agentStatus {
+            switch status {
+            case "busy":
+                // 사용자가 보낸 것 없이 도는 일 (기다리는 동안 대화 줄이기, 돌아왔을 때 요약): 할 일이 없으니 기다림으로 둔다
+                return isBackgroundWork(session, item: item) ? .needsInput : .working
+            case "waiting":
+                return .needsChoice
+            // "shell": 차례가 끝난 뒤 셸이 남아 있을 때 (10/31 확인: 응답을 끝내고 몇 시간째 shell). 할 일은 없다
+            case "idle", "shell":
+                if item.screen != nil { return item.analysis?.state == .needsChoice ? .needsChoice : .needsInput }
+                // 이번에 화면을 못 읽었으면, 상태가 그대로인 동안 보이던 선택지를 그대로 둔다
+                let unchanged = (item.statusSince ?? .distantPast) <= session.stateSince
+                return session.state == .needsChoice && unchanged ? .needsChoice : .needsInput
+            default:
+                break
+            }
+        }
         // 이번에 읽은 화면이 가장 정확하다
         if item.screen != nil, let analysis = item.analysis, analysis.state != .unknown, analysis.state != .exited {
             return analysis.state
         }
         if item.isActive { return .working }
-        // Claude Code가 스스로 적는 상태 (Terminal 권한이 없거나 VS Code 안에서 돌아 화면을 못 읽어도 정확하다)
-        switch item.agentStatus {
-        case "busy": return .working
-        case "waiting": return .needsChoice
-        case "idle": return .needsInput
-        default: break
-        }
         // 화면을 못 읽는 세션: 출력이 멈춘 뒤 들어온 훅을 따른다
         if let event = session.lastEvent, event.date >= (lastActiveAt[session.id] ?? .distantPast) {
             switch event.name {
@@ -426,21 +440,43 @@ final class AgentStore: ObservableObject {
         return session.state == .exited ? .unknown : session.state
     }
 
+    /// Claude Code가 busy인데 사용자가 보낸 것이 없다: 마지막 훅이 차례 끝(Stop)이나 시작(SessionStart)이고 그 뒤로 지시가 없었다.
+    /// Claude Code는 기다리는 동안 프롬프트 캐시가 끝나기 전에 대화를 줄이고(idleCompaction), 돌아왔을 때 요약(recap)을 만든다. 훅이 있는 계정만 가린다
+    private func isBackgroundWork(_ session: AgentSession, item: PollItem) -> Bool {
+        guard hasClaudeHooks(session), let event = session.lastEvent else { return false }
+        let idleEvent = event.name == "Stop" || event.name == "SessionStart"
+            || (event.name == "Notification" && event.notificationType == "idle_prompt")
+        return idleEvent && event.date <= (item.statusSince ?? .distantFuture)
+    }
+
+    /// 이 Claude 세션의 계정에 Cheoma 훅이 들어 있는지 (차례가 끝난 것을 Stop 훅으로 정확히 안다)
+    private func hasClaudeHooks(_ session: AgentSession) -> Bool {
+        guard session.kind == .claude, let account = session.account else { return false }
+        return hookStatus.claude.contains { $0.configDir.lastPathComponent == account && $0.hooks }
+    }
+
     private func transition(_ session: inout AgentSession, to state: AgentState, at date: Date) {
         let previous = session.state
+        let workedFor = date.timeIntervalSince(session.stateSince)
         session.state = state
         session.stateSince = date
-        // 보고 있는 세션은 알리지 않는다
-        if isVisible && selectedSession?.id == session.id { return }
-        let alert: NotchAlert
         switch state {
         case .needsChoice:
-            alert = NotchAlert(symbol: "hand.raised.fill", tint: .orange, text: "\(Self.shortName(session.kind)) 확인 필요")
-        case .needsInput where previous == .working:
-            alert = NotchAlert(symbol: "checkmark.circle.fill", tint: .green, text: "\(Self.shortName(session.kind)) 끝났어요")
+            alert(.needsChoice, for: session, at: date)
+        // 훅이 있는 Claude는 Stop 훅으로만 알린다 (receive). 나머지는 잠깐 멈춘 출력에 울리지 않게 몇 초는 일했어야 한다
+        case .needsInput where previous == .working && !hasClaudeHooks(session) && workedFor >= Self.minimumWork:
+            alert(.needsInput, for: session, at: date)
         default:
-            return
+            break
         }
+    }
+
+    private func alert(_ state: AgentState, for session: AgentSession, at date: Date) {
+        // 보고 있는 세션은 알리지 않는다
+        if isVisible && selectedSession?.id == session.id { return }
+        let alert = state == .needsChoice
+            ? NotchAlert(symbol: "hand.raised.fill", tint: .orange, text: "\(Self.shortName(session.kind)) 확인 필요")
+            : NotchAlert(symbol: "checkmark.circle.fill", tint: .green, text: "\(Self.shortName(session.kind)) 끝났어요")
         if let last = lastAlert[session.id], last.state == state, date.timeIntervalSince(last.date) < Self.alertCooldown { return }
         lastAlert[session.id] = (state, date)
         onAlert?(alert, session.id)
@@ -463,6 +499,10 @@ final class AgentStore: ObservableObject {
     private func receive(_ event: AgentHookEvent) {
         if let index = sessions.firstIndex(where: { Self.matches(event, $0) }) {
             sessions[index].lastEvent = event
+            // 사용자가 보낸 지시가 정말 끝났을 때 (Claude Code의 Stop 훅). 기다리는 동안 혼자 도는 일에는 오지 않는다
+            if event.name == "Stop", sessions[index].kind == .claude, sessions[index].state == .working {
+                alert(.needsInput, for: sessions[index], at: event.date)
+            }
             // 훅이 왔으니 화면을 바로 다시 읽는다
             lastCaptured[sessions[index].id] = nil
         } else {

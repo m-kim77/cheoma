@@ -77,7 +77,7 @@ enum AgentsDump {
         let store = AgentStore()
         store.isVisible = true
         store.start()
-        RunLoop.main.run(until: Date().addingTimeInterval(4))
+        RunLoop.main.run(until: Date().addingTimeInterval(8))
         print("세션 \(store.sessions.count)개 (목록 순서대로)")
         for session in store.sessions {
             print("  \(session.id)  \(session.kind.rawValue)  \(session.account ?? "")  \(session.state.title)  \(session.projectName)"
