@@ -60,6 +60,7 @@ struct NotchView: View {
                 shape.fill(Color.black)
                     .shadow(color: .black.opacity(model.phase == .open ? 0.45 : 0), radius: 14, y: 6)
             }
+            .opacity(model.phase == .closed && model.hidesVirtualNotch ? 0 : 1)
     }
 
     /// 모양이 커지는 중에도 내용은 다 펼쳤을 때의 크기로 둔다

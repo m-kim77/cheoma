@@ -33,6 +33,14 @@ final class NotchWindowController {
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .sink { [weak self] _ in self?.layout() }
             .store(in: &cancellables)
+        // 전체화면 앱으로 들어가거나 나오면 메뉴바가 숨거나 나타난다
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.publisher(for: NSWorkspace.activeSpaceDidChangeNotification)
+            .merge(with: workspace.publisher(for: NSWorkspace.didActivateApplicationNotification))
+            // 공간이 바뀌는 애니메이션이 끝난 뒤에 메뉴바 상태가 맞아진다
+            .debounce(for: .seconds(0.6), scheduler: RunLoop.main)
+            .sink { [weak self] _ in self?.updateVirtualNotch() }
+            .store(in: &cancellables)
 
         let handler: (NSEvent) -> Void = { [weak self] _ in
             MainActor.assumeIsolated { self?.handleMouseMoved() }
@@ -59,6 +67,15 @@ final class NotchWindowController {
                               width: Self.windowSize.width,
                               height: Self.windowSize.height),
                        display: true)
+        updateVirtualNotch()
+    }
+
+    /// 노치 없는 화면에서는 메뉴바 가운데에 검은 가상 노치를 그린다. 메뉴바가 숨으면(전체화면 영상 등)
+    /// 그 알약만 화면 위에 떠 보이므로 닫혀 있는 동안은 그리지 않는다 (마우스를 올리면 그대로 펼쳐진다)
+    private func updateVirtualNotch() {
+        guard let screen else { return }
+        let hides = !Self.hasNotch(screen) && !Self.isMenuBarVisible(on: screen)
+        if model.hidesVirtualNotch != hides { model.hidesVirtualNotch = hides }
     }
 
     private func handleMouseMoved() {
@@ -76,9 +93,32 @@ final class NotchWindowController {
                height: size.height)
     }
 
-    /// 노치가 있는 내장 디스플레이 우선, 없으면 메인 화면
+    /// 노치가 있는 내장 디스플레이 우선, 없으면 주 화면(메뉴바가 처음 놓이는 화면).
+    /// NSScreen.main은 지금 키 윈도우가 있는 화면이라 앱을 오갈 때마다 바뀐다
     private static func preferredScreen() -> NSScreen? {
-        NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main
+        NSScreen.screens.first(where: hasNotch) ?? NSScreen.screens.first
+    }
+
+    private static func hasNotch(_ screen: NSScreen) -> Bool {
+        screen.safeAreaInsets.top > 0 && screen.auxiliaryTopLeftArea != nil && screen.auxiliaryTopRightArea != nil
+    }
+
+    /// 이 화면에 메뉴바 창(Window Server의 "Menubar")이 지금 떠 있는지. 창 이름과 위치는 화면 기록 권한 없이 읽힌다.
+    /// 메뉴바 창을 하나도 못 찾으면(macOS가 바뀌었을 때) 보이는 것으로 친다
+    private static func isMenuBarVisible(on screen: NSScreen) -> Bool {
+        let level = Int(CGWindowLevelForKey(.mainMenuWindow))
+        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+        let menuBars = windows.compactMap { window -> CGRect? in
+            guard window[kCGWindowName as String] as? String == "Menubar",
+                  window[kCGWindowLayer as String] as? Int == level,
+                  let bounds = window[kCGWindowBounds as String] as? NSDictionary else { return nil }
+            return CGRect(dictionaryRepresentation: bounds)
+        }
+        guard !menuBars.isEmpty else { return true }
+        // 창 목록은 주 화면 왼쪽 위가 원점이고 아래로 갈수록 y가 커진다
+        let primaryTop = NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY
+        let top = primaryTop - screen.frame.maxY
+        return menuBars.contains { abs($0.minY - top) < 2 && $0.midX > screen.frame.minX && $0.midX < screen.frame.maxX }
     }
 
     private static func notchSize(of screen: NSScreen) -> CGSize {

@@ -32,6 +32,12 @@ final class WarningAlerts {
         post(.battery, level: threshold == 10 ? 2 : 1, Self.battery(level: new.level))
     }
 
+    /// 켤 때 이미 배터리가 20% 이하로 배터리를 쓰고 있으면 한 번 알린다
+    func batteryAtLaunch(_ state: BatteryState) {
+        guard !state.isPluggedIn, state.level <= 20 else { return }
+        post(.battery, level: state.level <= 10 ? 2 : 1, Self.battery(level: state.level))
+    }
+
     private func post(_ kind: Kind, level: Int, _ alert: NotchAlert?) {
         guard let alert, Self.isEnabled else { return }
         let now = Date()
@@ -44,20 +50,20 @@ final class WarningAlerts {
 
     static func thermal(_ state: ProcessInfo.ThermalState) -> NotchAlert? {
         switch state {
-        case .serious: NotchAlert(symbol: "thermometer.high", tint: .orange, text: "발열 높음")
-        case .critical: NotchAlert(symbol: "thermometer.high", tint: .red, text: "과열 주의")
+        case .serious: NotchAlert(symbol: "thermometer.high", tint: .orange, text: "발열 높음", isWarning: true)
+        case .critical: NotchAlert(symbol: "thermometer.high", tint: .red, text: "과열 주의", isWarning: true)
         default: nil
         }
     }
 
     static func memory(_ event: DispatchSource.MemoryPressureEvent) -> NotchAlert? {
-        if event.contains(.critical) { return NotchAlert(symbol: "memorychip", tint: .red, text: "메모리 매우 부족") }
-        if event.contains(.warning) { return NotchAlert(symbol: "memorychip", tint: .yellow, text: "메모리 부족") }
+        if event.contains(.critical) { return NotchAlert(symbol: "memorychip", tint: .red, text: "메모리 매우 부족", isWarning: true) }
+        if event.contains(.warning) { return NotchAlert(symbol: "memorychip", tint: .yellow, text: "메모리 부족", isWarning: true) }
         return nil
     }
 
     static func battery(level: Int) -> NotchAlert {
         NotchAlert(symbol: level <= 10 ? "battery.0percent" : "battery.25percent",
-                   tint: level <= 10 ? .red : .orange, text: "배터리 \(level)%")
+                   tint: level <= 10 ? .red : .orange, text: "배터리 \(level)%", isWarning: true)
     }
 }
