@@ -144,7 +144,8 @@ Right-click `⌄` in the menu bar:
 | 경고 알림 (과열·메모리·배터리) | Warning alerts (heat, memory, battery) |
 | 로그인 시 자동 실행 | Launch at login |
 | 노치 모양 › 기본 / 광화문 | Notch shape › Basic / Gwanghwamun |
-| 설정… (⌘,) | Settings… : general, agents and accounts in one window |
+| 설정… (⌘,) | Settings… : general, agents, accounts and updates in one window |
+| 새 버전 확인… | Check for updates… : checks now and opens Settings › 업데이트 (Updates) |
 | 종료 | Quit |
 
 ### Alerts from Terminal
@@ -174,13 +175,17 @@ The dashboard, sensors and alerts need no permission.
 
 ## Privacy
 
-Cheoma has no network code: no analytics, no update checks, no accounts. Everything it measures stays on your Mac.
+The only thing Cheoma sends over the network is the update check. Shortly after launch and then once a day, it asks GitHub for the latest release (`api.github.com/repos/m-kim77/cheoma/releases/latest`). The request carries the app name and version (`Cheoma/0.2.0`) and, like any web request, your IP address. Nothing else: no analytics, no accounts, and everything Cheoma measures stays on your Mac.
+
+To turn the check off, switch off **새 버전 확인** (Check for new versions) in Settings › 업데이트 (Updates). Cheoma then makes no network requests at all.
 
 The Agents tab reads files the agents keep on your Mac (session status, conversation logs and the account and limit info they save) and terminal screens. It changes agent settings only when you click **모두 연결** (Connect all), and copies a conversation only when you resume it in another account.
 
 ## Update
 
-Cheoma doesn't update itself yet. To hear about new versions, click **Watch** › **Custom** › **Releases** at the top of this page.
+When a new version is out, a **새 버전 0.2.0** (New version) alert slides out of the notch once. Click it to open the release page. Settings › 업데이트 (Updates) shows what changed, with a **받기** (Download) button. **지금 확인** (Check now) there, or right-click `⌄` › **새 버전 확인…**, checks right away. If you turned the check off, click **Watch** › **Custom** › **Releases** at the top of this page instead.
+
+Cheoma doesn't install updates itself yet, because the app isn't notarized. Replace it by hand:
 
 1. Quit Cheoma: right-click `⌄` › **종료** (Quit).
 2. Download the new [`Cheoma.zip`](https://github.com/m-kim77/cheoma/releases/latest/download/Cheoma.zip) and replace `Cheoma.app` in Applications. macOS may ask you to confirm **Open Anyway** again.
@@ -266,6 +271,7 @@ Sources/
 │   ├── Events/          charger and unlock events, warning alerts
 │   ├── Agents/          finding coding agent sessions, reading their screens and usage, hooks, tmux and Terminal
 │   ├── Settings/        the Settings window
+│   ├── Updates/         checking GitHub for a new release
 │   └── Debug/           --render previews and --bench
 ├── CheomaShared/        SMC access and the fan helper's XPC protocol, shared by both
 └── CheomaFanHelper/     the root fan helper

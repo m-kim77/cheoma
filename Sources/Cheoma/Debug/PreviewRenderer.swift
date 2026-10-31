@@ -36,7 +36,9 @@ enum PreviewRenderer {
 
         // 가장 긴 문구까지 귀 안에 들어가는지 본다
         let alerts = [NotchAlert(symbol: "bolt.fill", tint: .green, text: "충전 중 90%"),
-                      WarningAlerts.thermal(.critical), WarningAlerts.memory(.critical), WarningAlerts.battery(level: 10)]
+                      WarningAlerts.thermal(.critical), WarningAlerts.memory(.critical), WarningAlerts.battery(level: 10),
+                      UpdateChecker.alert(for: UpdateChecker.sampleRelease), UpdateChecker.alert(for: AppRelease(
+                          tagName: "v10.10.10", name: nil, body: nil, htmlURL: UpdateChecker.latestURL, draft: false, prerelease: false))]
         for (index, alert) in alerts.compactMap({ $0 }).enumerated() {
             model.previewAlert(alert)
             render(NotchView(model: model, stats: stats, fans: fans, agents: agents), to: folder.appendingPathComponent("alert-\(index).png"))
@@ -91,8 +93,16 @@ enum PreviewRenderer {
 
     /// 설정 창의 탭마다. Form은 AppKit 뷰라 ImageRenderer 대신 창에 그려서 뜬다
     private static func renderSettings(model: NotchModel, agents: AgentStore, folder: URL) {
-        for (name, tab) in [("general", SettingsView.Tab.general), ("agents", .agents), ("accounts", .accounts)] {
-            let hosting = NSHostingView(rootView: SettingsView(model: model, agents: agents, tab: tab))
+        // 업데이트 탭은 최신일 때와 새 버전이 있을 때
+        let upToDate = UpdateChecker.preview(available: nil)
+        let available = UpdateChecker.preview(available: UpdateChecker.sampleRelease)
+        let variants: [(String, SettingsView.Tab, UpdateChecker)] = [
+            ("general", .general, upToDate), ("agents", .agents, upToDate), ("accounts", .accounts, upToDate),
+            ("updates", .updates, upToDate), ("updates-available", .updates, available),
+        ]
+        for (name, tab, updates) in variants {
+            let hosting = NSHostingView(rootView: SettingsView(model: model, agents: agents, updates: updates,
+                                                               navigation: SettingsNavigation(tab: tab)))
             let window = NSWindow(contentRect: CGRect(x: -6000, y: -6000, width: 560, height: 520),
                                   styleMask: [.titled], backing: .buffered, defer: false)
             window.contentView = hosting

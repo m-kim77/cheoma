@@ -7,6 +7,8 @@ struct NotchAlert: Equatable {
     let text: String
     /// 과열·메모리·배터리 경고. 정보성 알림(잠금 해제, 충전기 등)에 덮이지 않는다
     var isWarning = false
+    /// 누르면 여는 주소 (새 버전 알림 → 릴리스 페이지). 있으면 귀를 누를 수 있다
+    var url: URL? = nil
 }
 
 /// 노치 영역의 상태. 크기는 phase 하나로 결정되고, 뷰는 그 크기로 스프링 애니메이션한다.
@@ -230,6 +232,13 @@ final class NotchModel: ObservableObject {
         let work = DispatchWorkItem { [weak self] in self?.alertFinished() }
         alertWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + item.duration, execute: work)
+    }
+
+    /// 누를 수 있는 알림을 눌렀을 때: 바로 닫고 다음 알림으로 넘어간다 (주소는 창 쪽에서 연다)
+    func dismissAlert() {
+        alertWork?.cancel()
+        alertWork = nil
+        alertFinished()
     }
 
     /// 알림 시간이 끝났을 때 (테스트에서는 바로 부른다)

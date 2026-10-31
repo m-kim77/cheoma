@@ -10,14 +10,19 @@ final class SettingsWindowController {
 
     private let model: NotchModel
     private let agents: AgentStore
+    private let updates: UpdateChecker
+    private let navigation = SettingsNavigation()
     private var window: NSWindow?
 
-    init(model: NotchModel, agents: AgentStore) {
+    init(model: NotchModel, agents: AgentStore, updates: UpdateChecker) {
         self.model = model
         self.agents = agents
+        self.updates = updates
     }
 
-    func show() {
+    /// tab을 주면 그 탭으로 연다 (메뉴의 "새 버전 확인…" → 업데이트)
+    func show(tab: SettingsView.Tab? = nil) {
+        if let tab { navigation.tab = tab }
         let window = self.window ?? makeWindow()
         self.window = window
         agents.refreshNow()
@@ -27,7 +32,7 @@ final class SettingsWindowController {
     }
 
     private func makeWindow() -> NSWindow {
-        let hosting = NSHostingController(rootView: SettingsView(model: model, agents: agents))
+        let hosting = NSHostingController(rootView: SettingsView(model: model, agents: agents, updates: updates, navigation: navigation))
         let window = NSWindow(contentViewController: hosting)
         window.title = "Cheoma 설정"
         window.styleMask = [.titled, .closable, .miniaturizable]
@@ -38,15 +43,25 @@ final class SettingsWindowController {
     }
 }
 
+/// 설정 창이 보여 줄 탭. 창 밖(메뉴)에서도 바꿀 수 있게 따로 둔다
+final class SettingsNavigation: ObservableObject {
+    @Published var tab: SettingsView.Tab
+
+    init(tab: SettingsView.Tab = .general) {
+        self.tab = tab
+    }
+}
+
 struct SettingsView: View {
-    enum Tab: Hashable, CaseIterable { case general, agents, accounts }
+    enum Tab: Hashable, CaseIterable { case general, agents, accounts, updates }
 
     @ObservedObject var model: NotchModel
     @ObservedObject var agents: AgentStore
-    @State var tab = Tab.general
+    let updates: UpdateChecker
+    @ObservedObject var navigation: SettingsNavigation
 
     var body: some View {
-        TabView(selection: $tab) {
+        TabView(selection: $navigation.tab) {
             GeneralSettings(model: model)
                 .tabItem { Label("일반", systemImage: "gearshape") }
                 .tag(Tab.general)
@@ -56,6 +71,9 @@ struct SettingsView: View {
             AccountSettings(agents: agents)
                 .tabItem { Label("계정", systemImage: "person.2") }
                 .tag(Tab.accounts)
+            UpdateSettings(updates: updates)
+                .tabItem { Label("업데이트", systemImage: "arrow.down.circle") }
+                .tag(Tab.updates)
         }
         .frame(width: 560, height: 520)
     }
@@ -120,6 +138,68 @@ private struct GeneralSettings: View {
             AppLog.write("로그인 항목 설정 실패: \(error.localizedDescription)")
         }
         launchAtLogin = service.status == .enabled
+    }
+}
+
+// MARK: - 업데이트
+
+private struct UpdateSettings: View {
+    @ObservedObject var updates: UpdateChecker
+    @AppStorage(UpdateChecker.enabledKey) private var checksUpdates = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("새 버전 확인", isOn: $checksUpdates)
+                    .onChange(of: checksUpdates) { _, value in if value { updates.checkIfDue() } }
+                LabeledContent("현재 버전", value: updates.current?.description ?? "개발 빌드")
+                HStack {
+                    Text(updateStatus).foregroundStyle(.secondary)
+                    Spacer()
+                    if updates.isChecking { ProgressView().controlSize(.small) }
+                    Button("지금 확인") { updates.checkNow() }
+                        .disabled(updates.isChecking || updates.current == nil)
+                }
+            } footer: {
+                Text("켜 두면 앱을 켜고 조금 뒤 한 번, 그 뒤로 하루에 한 번 GitHub에서 최신 릴리스 정보만 받아 와요. 새 버전은 노치로 한 번 알려요.")
+            }
+            if let release = updates.available {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("바뀐 내용")
+                        Self.markdown(release.summary())
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    HStack {
+                        Text("릴리스 페이지에서 Cheoma.zip을 받아요").foregroundStyle(.secondary)
+                        Spacer()
+                        Button("받기") { NSWorkspace.shared.open(release.htmlURL) }
+                            .buttonStyle(.borderedProminent)
+                    }
+                } header: {
+                    Text("새 버전 \(release.version?.description ?? release.tagName)")
+                } footer: {
+                    Text("자동으로 설치하지는 않아요. 앱을 끄고, 받은 zip을 풀어 응용 프로그램 폴더의 Cheoma를 바꿔요.")
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var updateStatus: String {
+        if updates.current == nil { return "개발 빌드는 확인하지 않아요" }
+        if updates.isChecking { return "확인하는 중…" }
+        if updates.lastCheckFailed { return "확인하지 못했어요 · 인터넷 연결을 봐 주세요" }
+        guard let checked = updates.lastChecked else { return "아직 확인하지 않았어요" }
+        let when = AgentsStyle.ago(checked)
+        return updates.available == nil ? "최신 버전이에요 · \(when) 확인" : "새 버전이 있어요 · \(when) 확인"
+    }
+
+    /// 굵게 · 링크 같은 줄 안의 마크다운만 그린다 (줄바꿈은 그대로)
+    private static func markdown(_ text: String) -> Text {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        return (try? AttributedString(markdown: text, options: options)).map(Text.init) ?? Text(text)
     }
 }
 

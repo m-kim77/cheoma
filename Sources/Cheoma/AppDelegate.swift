@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings: SettingsWindowController?
     private let systemEvents = SystemEventMonitor()
     private let warnings = WarningAlerts()
+    private let updates = UpdateChecker()
     private var notifyObserver: NSObjectProtocol?
     private var terminationSource: DispatchSourceSignal?
     private var cancellables = Set<AnyCancellable>()
@@ -47,8 +48,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusBar.currentTheme = { [weak self] in self?.notchModel.theme ?? .basic }
         statusBar.onSelectTheme = { [weak self] theme in self?.notchModel.theme = theme }
-        let settings = SettingsWindowController(model: notchModel, agents: agents)
+        let settings = SettingsWindowController(model: notchModel, agents: agents, updates: updates)
         statusBar.onOpenSettings = { [weak settings] in settings?.show() }
+        // 지금 확인하고, 결과가 보이는 설정 창 › 업데이트를 연다
+        statusBar.onCheckUpdates = { [weak self] in
+            self?.settings?.show(tab: .updates)
+            self?.updates.checkNow()
+        }
         self.settings = settings
         self.statusBar = statusBar
         NotificationCenter.default.publisher(for: SettingsWindowController.openNotification)
@@ -56,6 +62,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         warnings.onAlert = { [weak self] alert in self?.notchModel.show(alert) }
+        // 새 버전 알림은 누를 수 있도록 조금 더 오래 띄운다 (누르면 릴리스 페이지)
+        updates.onAlert = { [weak self] alert in self?.notchModel.show(alert, duration: 8) }
+        updates.start()
         systemEvents.onThermalStateChange = { [weak self] state in self?.warnings.thermalStateChanged(to: state) }
         systemEvents.onMemoryPressure = { [weak self] event in self?.warnings.memoryPressureChanged(to: event) }
         systemEvents.onBatteryChange = { [weak self] new, old in

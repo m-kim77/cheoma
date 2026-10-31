@@ -6,6 +6,9 @@ import SwiftUI
 final class NotchWindowController {
     private let model: NotchModel
     private let panel: OverlayPanel
+    /// 누를 수 있는 알림(새 버전)이 떠 있는 동안만 귀 위에 놓는 작은 창.
+    /// 큰 노치 창은 닫혀 있는 동안 클릭을 뒤로 통과시키므로, 알림 모양만큼만 따로 클릭을 받는다
+    private let alertClickPanel = OverlayPanel(size: .zero)
     private var screen: NSScreen?
     private var monitors: [Any] = []
     private var cancellables = Set<AnyCancellable>()
@@ -30,6 +33,20 @@ final class NotchWindowController {
         // 닫혀 있을 땐 클릭이 뒤의 메뉴바로 통과하도록
         model.$isOpen
             .sink { [weak panel] isOpen in panel?.ignoresMouseEvents = !isOpen }
+            .store(in: &cancellables)
+
+        alertClickPanel.level = NSWindow.Level(rawValue: panel.level.rawValue + 1)
+        alertClickPanel.ignoresMouseEvents = false
+        // 이 창 위에서도 마우스 움직임을 받아야 노치에 다가가면 펼쳐진다
+        alertClickPanel.acceptsMouseMovedEvents = true
+        let clickView = AlertClickView()
+        clickView.onClick = { [weak self] in self?.alertClicked() }
+        alertClickPanel.contentView = clickView
+        // 값이 바뀌기 직전에 불리므로 넘어온 값으로 판단한다
+        model.$alert.combineLatest(model.$isOpen)
+            .map { alert, isOpen in !isOpen && alert?.url != nil }
+            .removeDuplicates()
+            .sink { [weak self] clickable in self?.setAlertClickable(clickable) }
             .store(in: &cancellables)
 
         // 에이전트 탭이 펼쳐져 있는 동안만 키 창이 될 수 있다 (답 입력). 닫히거나 다른 탭으로 가면 키보드를 원래 앱에 돌려준다
@@ -86,6 +103,22 @@ final class NotchWindowController {
         guard !allowed else { return }
         model.keepsOpen = false
         panel.giveUpKeyFocus()
+    }
+
+    private func setAlertClickable(_ clickable: Bool) {
+        guard clickable, let screen else {
+            alertClickPanel.orderOut(nil)
+            return
+        }
+        let size = CGSize(width: model.notchSize.width + NotchModel.earWidth * 2, height: model.notchSize.height)
+        alertClickPanel.setFrame(Self.topCenterRect(in: screen, size: size), display: false)
+        alertClickPanel.orderFrontRegardless()
+    }
+
+    private func alertClicked() {
+        guard let url = model.alert?.url else { return }
+        NSWorkspace.shared.open(url)
+        model.dismissAlert()
     }
 
     private func layout() {
@@ -160,5 +193,19 @@ final class NotchWindowController {
         }
         // 노치 없는 모니터: 메뉴바 높이에 맞춘 가상 노치
         return CGSize(width: 185, height: NSStatusBar.system.thickness)
+    }
+}
+
+/// 알림 귀 위의 투명한 클릭 받이. 키 창이 아니어도 첫 클릭을 바로 받는다
+private final class AlertClickView: NSView {
+    var onClick: (() -> Void)?
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { onClick?() }
+
+    // 완전히 투명한 곳은 클릭이 뒤로 통과할 수 있어서 보이지 않을 만큼만 칠한다 (검은 귀 위라 안 보인다)
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.black.withAlphaComponent(0.01).setFill()
+        dirtyRect.fill()
     }
 }
