@@ -192,7 +192,7 @@ Cheoma doesn't install updates itself yet, because the app isn't notarized. Repl
 3. If hidden icons stop responding, the Accessibility permission still belongs to the old version. In System Settings › Privacy & Security › Accessibility, select Cheoma, remove it with `−`, and allow it again. Or run `tccutil reset Accessibility io.github.m-kim77.cheoma`.
 4. If you use fan control, the Fans tab shows **다시 설치** (Reinstall) after the update, because the helper only talks to the exact build it was installed for. Click it and enter your password.
 
-Your settings and graph history are kept.
+Your settings and graph history are kept. What changed in each version is in the [changelog](CHANGELOG.md).
 
 ## Uninstall
 
