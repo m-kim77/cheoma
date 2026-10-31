@@ -649,7 +649,7 @@ final class FanController: ObservableObject {
     }
 
     /// 메인 스레드를 막지 않도록 osascript를 별도 프로세스로 실행한다
-    private func runAsAdministrator(_ shell: String, prompt: String, completion: @escaping @MainActor (String?) -> Void) {
+    private func runAsAdministrator(_ shell: String, prompt: String, completion: @escaping @MainActor @Sendable (String?) -> Void) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments = ["-e", Self.shellScript(shell, administratorPrompt: prompt)]

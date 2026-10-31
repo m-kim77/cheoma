@@ -7,7 +7,8 @@ import CheomaShared
 // 안전장치: 앱 연결이나 keepAlive가 끊기면, 또는 CPU 온도가 한계(팬을 멈춘 동안은 더 낮은 한계)를 넘으면 자동으로 되돌린다.
 // 되돌리기(SMC 쓰기)가 실패하면 수동 상태로 남겨 두고 watchdog이 될 때까지 다시 시도한다 (팬이 멈춘 채로 남지 않게).
 
-final class FanService: NSObject, FanHelperProtocol {
+/// 상태는 queue 안에서만 읽고 쓴다 (그래서 @unchecked Sendable)
+final class FanService: NSObject, FanHelperProtocol, @unchecked Sendable {
     private struct Fan {
         let modeKey: String     // M5는 F0md, 이전 칩은 F0Md
         let targetKey: String
@@ -44,7 +45,7 @@ final class FanService: NSObject, FanHelperProtocol {
 
     // MARK: FanHelperProtocol
 
-    func setFanSpeeds(_ rpms: [NSNumber]?, reply: @escaping (String?) -> Void) {
+    func setFanSpeeds(_ rpms: [NSNumber]?, reply: @escaping @Sendable (String?) -> Void) {
         queue.async { [self] in
             guard let smc else { return reply("SMC를 열 수 없어요") }
             guard !fans.isEmpty else { return reply("이 맥에서 팬을 찾지 못했어요") }
@@ -76,7 +77,7 @@ final class FanService: NSObject, FanHelperProtocol {
         }
     }
 
-    func keepAlive(reply: @escaping (Bool, Bool) -> Void) {
+    func keepAlive(reply: @escaping @Sendable (Bool, Bool) -> Void) {
         queue.async { [self] in
             lastKeepAlive = DispatchTime.now()
             // 되돌리는 중(실패해서 다시 시도 중)이면 앱에는 이미 수동이 아닌 것으로 알린다
@@ -84,7 +85,7 @@ final class FanService: NSObject, FanHelperProtocol {
         }
     }
 
-    func version(reply: @escaping (Int) -> Void) {
+    func version(reply: @escaping @Sendable (Int) -> Void) {
         reply(FanHelper.version)
     }
 

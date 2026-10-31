@@ -28,7 +28,8 @@ enum MenuBarItemScanner {
     static var hasPermission: Bool { AXIsProcessTrusted() }
 
     static func requestPermission() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        // kAXTrustedCheckOptionPrompt는 전역 var라 Swift 6에서 경고가 나서 같은 값의 문자열을 쓴다
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
