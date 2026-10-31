@@ -1,0 +1,40 @@
+> [1mYou are in [0m/private/tmp/claude-501/-Users-user0-Documents-project-M-mac-project-menu-bar/da228b62-56cb-4205-a0fc-98ce8
+
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt
+  injection. Trusting the directory allows project-local config, hooks, and exec policies to load.
+
+  1. Yes, continue
+[38;5;6m› 2. No, quit[39m
+
+  [2mPress enter to continue[0m
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,40 @@
+ [38;2;167;152;215m- [39mFixed in-memory session forks before an active turn settled ([4m[38;2;105;173;208m#8937[0m[38;2;157;165;169m (https://github.com/earendil-works/pi/pull/8937)[39m
+   by [4m[38;2;105;173;208m@acmerfight[0m[38;2;157;165;169m (https://github.com/acmerfight)[39m).
+ [38;2;167;152;215m- [39mFixed inherited Fireworks GLM models using the wrong API adapter.
+ [38;2;167;152;215m- [39mFixed inherited [38;2;167;152;215mNO_PROXY[39m matching for root domains and subdomains ([4m[38;2;105;173;208m#8737[0m[38;2;157;165;169m
+[39m   [38;2;157;165;169m(https://github.com/earendil-works/pi/pull/8737)[39m by [4m[38;2;105;173;208m@MeiSiristhebest[0m[38;2;157;165;169m (https://github.com/MeiSiristhebest)[39m).
+ [38;2;167;152;215m- [39mFixed [38;2;167;152;215mbash[39m, [38;2;167;152;215medit[39m, [38;2;167;152;215mfind[39m, [38;2;167;152;215mgrep[39m, [38;2;167;152;215mls[39m, [38;2;167;152;215mread[39m, and [38;2;167;152;215mwrite[39m tools ignoring [38;2;167;152;215mctx.cwd[39m ([4m[38;2;105;173;208m#8627[0m[38;2;157;165;169m
+[39m   [38;2;157;165;169m(https://github.com/earendil-works/pi/pull/8627)[39m by [4m[38;2;105;173;208m@vmizg[0m[38;2;157;165;169m (https://github.com/vmizg)[39m).
+ [38;2;167;152;215m- [39mFixed inherited terminal startup under restricted seccomp policies that reject the [38;2;167;152;215mSIGWINCH[39m self-signal ([4m[38;2;105;173;208m#8898[0m[38;2;157;165;169m
+[39m   [38;2;157;165;169m(https://github.com/earendil-works/pi/pull/8898)[39m by [4m[38;2;105;173;208m@bartlomiejkida[0m[38;2;157;165;169m (https://github.com/bartlomiejkida)[39m).
+ [38;2;167;152;215m- [39mFixed inherited Zed terminal image capability detection ([4m[38;2;105;173;208m#8828[0m[38;2;157;165;169m (https://github.com/earendil-works/pi/pull/8828)[39m by
+   [4m[38;2;105;173;208m@Perlence[0m[38;2;157;165;169m (https://github.com/Perlence)[39m).
+ [38;2;167;152;215m- [39mFixed drag selection continuing over the fullscreen editor.
+ [38;2;167;152;215m- [39mFixed managed [38;2;167;152;215mfd[39m and ripgrep downloads requiring the GitHub Releases API ([4m[38;2;105;173;208m#8708[0m[38;2;157;165;169m
+[39m   [38;2;157;165;169m(https://github.com/earendil-works/pi/pull/8708)[39m by [4m[38;2;105;173;208m@Terminator666666[0m[38;2;157;165;169m (https://github.com/Terminator666666)[39m).
+ [38;2;167;152;215m- [39mFixed branch summaries failing when reasoning consumes the previous 2048-token output cap ([4m[38;2;105;173;208m#8845[0m[38;2;157;165;169m
+[39m   [38;2;157;165;169m(https://github.com/earendil-works/pi/issues/8845)[39m).
+ [38;2;167;152;215m- [39mFixed the write tool reporting UTF-16 code-unit counts as byte counts by removing the misleading count ([4m[38;2;105;173;208m#8979[0m[38;2;157;165;169m
+[39m   [38;2;157;165;169m(https://github.com/earendil-works/pi/issues/8979)[39m).
+ [38;2;167;152;215m- [39mFixed proxied plain-HTTP provider requests hanging after a tool call by tunneling them with CONNECT ([4m[38;2;105;173;208m#8134[0m[38;2;157;165;169m
+[39m   [38;2;157;165;169m(https://github.com/earendil-works/pi/issues/8134)[39m).
+ [38;2;167;152;215m- [39mFixed RPC [38;2;167;152;215mabort[39m reporting success without cancelling an in-progress manual compaction ([4m[38;2;105;173;208m#8920[0m[38;2;157;165;169m
+[39m   [38;2;157;165;169m(https://github.com/earendil-works/pi/issues/8920)[39m).
+
+[38;2;95;168;204m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+[39m [38;2;205;154;34mWarning: tmux extended-keys is off. Modified Enter keys may not work. Add `set -g extended-keys on` to ~/.tmux.conf
+[39m [38;2;205;154;34mand restart tmux.[39m
+
+[48;2;33;59;73m
+ [38;2;222;224;225mRun the shell command: touch a.txt[39m
+
+
+[49m [38;2;234;127;129mError: Codex error: The 'gpt-5.5' model is not supported when using Codex with a ChatGPT account.[39m
+ [38;2;157;165;169mIf this looks like a pi bug, /bug sends a report to the developers.[39m
+
+[38;2;97;133;204m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[7m[39m [0m
+[38;2;97;133;204m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[38;2;126;136;142m/private/tmp/claude-501/-Users-user0-Documents-project-M-mac-project-menu-bar/da228b62-56cb-4205-a0fc-98ce87024d68/sc...
+$0.000 (sub) 0.5%/272k (auto)                                                                           gpt-5.5 • medium
