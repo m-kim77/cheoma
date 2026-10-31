@@ -44,8 +44,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         systemEvents.onThermalStateChange = { [weak self] state in self?.warnings.thermalStateChanged(to: state) }
         systemEvents.onMemoryPressure = { [weak self] event in self?.warnings.memoryPressureChanged(to: event) }
         systemEvents.onBatteryChange = { [weak self] new, old in
-            // 최초 1회 읽기에는 알림을 띄우지 않음
-            guard let self, let old else { return }
+            guard let self else { return }
+            stats.powerSourceChanged()
+            // 최초 1회 읽기에는 충전기 알림을 띄우지 않는다 (배터리 부족만 확인)
+            guard let old else {
+                warnings.batteryAtLaunch(new)
+                return
+            }
             guard old.isPluggedIn != new.isPluggedIn else {
                 warnings.batteryChanged(new, from: old)
                 return

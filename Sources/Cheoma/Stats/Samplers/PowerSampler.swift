@@ -23,10 +23,16 @@ final class PowerSampler {
     private let battery = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
     private let energy = IOReportEnergy()
     private let smc = SMC()
-    /// 배터리 레지스트리는 약 1분마다만 바뀌는데 통째로 읽는 데 몇 ms가 걸려서 10초마다만 읽는다
-    /// (실시간 전력은 SMC에서 매초 읽고, 충전기 연결 알림은 SystemEventMonitor가 바로 받는다)
-    private var batteryProperties: (values: [String: Any], time: Date)?
+    /// 배터리 레지스트리는 약 1분마다만 바뀌는데 통째로 읽는 데 몇 ms가 걸려서 10초마다만 읽는다.
+    /// 어댑터 정격도 그때 같이 읽는다 (IPC라 매번 부르지 않는다). 실시간 전력은 SMC에서 매번 읽고,
+    /// 충전기를 꽂거나 빼면 powerSourceChanged()로 바로 다시 읽는다
+    private var batteryProperties: (values: [String: Any], adapterWatts: Int?, time: TimeInterval)?
     private static let batteryRefreshInterval: TimeInterval = 10
+
+    /// 충전기 연결·배터리 상태가 바뀌었을 때 (SystemEventMonitor가 알려 준다)
+    func powerSourceChanged() {
+        batteryProperties = nil
+    }
 
     deinit {
         if battery != 0 { IOObjectRelease(battery) }
@@ -39,9 +45,14 @@ final class PowerSampler {
     func sample(readEnergy: Bool = true) -> PowerStats? {
         if readEnergy, let energy { lastComponents = energy.sample() }
         let components = lastComponents
-        if battery != 0, batteryProperties.map({ Date().timeIntervalSince($0.time) > Self.batteryRefreshInterval }) ?? true,
+        let now = MonotonicClock.now
+        if battery != 0, batteryProperties.map({ now - $0.time > Self.batteryRefreshInterval }) ?? true,
            let fresh = IORegistry.properties(of: battery) {
-            batteryProperties = (fresh, Date())
+            let pluggedIn = fresh["ExternalConnected"] as? Bool ?? false
+            let adapter = pluggedIn
+                ? (IOPSCopyExternalPowerAdapterDetails()?.takeRetainedValue() as? [String: Any])?.int64(kIOPSPowerAdapterWattsKey).map(Int.init)
+                : nil
+            batteryProperties = (fresh, adapter, now)
         }
         guard let props = batteryProperties?.values else { return nil }
 
@@ -59,9 +70,7 @@ final class PowerSampler {
         let adapterInput = isPluggedIn
             ? smc?.float("PDTR").map(Double.init) ?? telemetry?.double("SystemPowerIn").map { $0 / 1000 }
             : nil
-        let adapterRated = isPluggedIn
-            ? (IOPSCopyExternalPowerAdapterDetails()?.takeRetainedValue() as? [String: Any])?.int64(kIOPSPowerAdapterWattsKey).map(Int.init)
-            : nil
+        let adapterRated = isPluggedIn ? batteryProperties?.adapterWatts : nil
 
         let health: Double? = {
             guard let raw = props.double("AppleRawMaxCapacity"), let design = props.double("DesignCapacity"),

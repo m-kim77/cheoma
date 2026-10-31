@@ -57,6 +57,19 @@ final class SystemEventMonitor {
         }
         source.resume()
         memoryPressure = source
+
+        reportCurrentState()
+    }
+
+    /// 위 알림은 바뀔 때만 오므로, 켤 때 이미 과열이거나 메모리가 부족하면 한 번 알린다
+    private func reportCurrentState() {
+        let thermal = ProcessInfo.processInfo.thermalState
+        if thermal == .serious || thermal == .critical { onThermalStateChange?(thermal) }
+        switch Sysctl.read("kern.memorystatus_vm_pressure_level", initial: Int32(0)) {
+        case 4: onMemoryPressure?(.critical)
+        case 2: onMemoryPressure?(.warning)
+        default: break
+        }
     }
 
     private func refreshBattery() {

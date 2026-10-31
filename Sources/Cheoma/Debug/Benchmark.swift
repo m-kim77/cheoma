@@ -16,7 +16,7 @@ enum Benchmark {
 
         if only == nil { measureSamplers() }
 
-        let stats = StatsStore()
+        let stats = StatsStore(savesHistory: false)
         let fans = FanController()
         let model = NotchModel()
         stats.start()

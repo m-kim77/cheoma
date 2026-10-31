@@ -18,7 +18,7 @@ enum PreviewRenderer {
             defaults.set(savedTheme, forKey: "notchTheme")
         }
 
-        let stats = StatsStore()
+        let stats = StatsStore(savesHistory: false)
         stats.showsApps = true
         stats.start()
         // 대시보드가 열린 것처럼 매초 잰다. CPU/네트워크 사용률과 구성요소별 전력(2초 간격)은 두 번째 측정부터 나오므로 잠깐 기다린다

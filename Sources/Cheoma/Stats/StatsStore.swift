@@ -27,7 +27,8 @@ final class StatsStore: ObservableObject {
     private let disk = DiskSampler()
     private let power = PowerSampler()
     private let thermal = ThermalSampler()
-    private let appUsage = AppUsageSampler()
+    /// 앱 탭을 닫으면 새로 만들어서 프로세스 기록과 실행 인자 버퍼(1MB)를 놓는다
+    private var appUsage = AppUsageSampler()
     private var timer: Timer?
     private var saveTimer: Timer?
     private var tickCount = 0
@@ -45,10 +46,19 @@ final class StatsStore: ObservableObject {
             guard showsApps != oldValue else { return }
             lastApps = nil
             // 기준값을 미리 잡아두면 다음 측정부터 바로 값이 나온다
-            if showsApps { _ = appUsage.sample() }
+            if showsApps { _ = appUsage.sample() } else { appUsage = AppUsageSampler() }
         }
     }
     private var lastApps: [AppUsage]?
+    /// 화면 주사율. 화면 구성이 바뀔 때만 다시 읽는다
+    private var refreshRate: Int??
+    private var screenObserver: NSObjectProtocol?
+    /// `--bench`처럼 잠깐 띄우는 경우 본 앱의 기록 파일을 덮어쓰지 않게 끈다
+    private let savesHistory: Bool
+
+    init(savesHistory: Bool = true) {
+        self.savesHistory = savesHistory
+    }
 
     private static let historyURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/Cheoma/history.plist")
@@ -56,6 +66,11 @@ final class StatsStore: ObservableObject {
     func start() {
         guard timer == nil else { return }
         loadHistory()
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshRate = nil }
+        }
         tick()
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.timerFired() }
@@ -66,6 +81,7 @@ final class StatsStore: ObservableObject {
         self.timer = timer
 
         // 갑자기 꺼져도 최대 5분치만 잃도록 주기적으로 저장
+        guard savesHistory else { return }
         let saveTimer = Timer(timeInterval: 300, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.saveHistory() }
         }
@@ -76,6 +92,7 @@ final class StatsStore: ObservableObject {
 
     /// 앱을 끌 때는 synchronously로 저장을 마치고 끝낸다
     func saveHistory(synchronously: Bool = false) {
+        guard savesHistory else { return }
         let history = self.history
         let url = Self.historyURL
         let write: @Sendable () -> Void = {
@@ -94,6 +111,11 @@ final class StatsStore: ObservableObject {
         saved.prune(now: Date().timeIntervalSinceReferenceDate)
         saved.discardImpossibleValues()
         history = saved
+    }
+
+    /// 충전기를 꽂거나 빼면 배터리 정보를 바로 다시 읽는다 (안 그러면 최대 10초 늦게 보인다)
+    func powerSourceChanged() {
+        power.powerSourceChanged()
     }
 
     private func timerFired() {
@@ -126,8 +148,11 @@ final class StatsStore: ObservableObject {
             if lastApps == nil || tickCount % 2 == 0 { lastApps = appUsage.sample() ?? lastApps }
             s.apps = lastApps
         }
-        s.refreshRate = NSScreen.screens.first { $0.safeAreaInsets.top > 0 }?.maximumFramesPerSecond
-            ?? NSScreen.main?.maximumFramesPerSecond
+        if refreshRate == nil {
+            refreshRate = .some(NSScreen.screens.first { $0.safeAreaInsets.top > 0 }?.maximumFramesPerSecond
+                ?? NSScreen.screens.first?.maximumFramesPerSecond)
+        }
+        s.refreshRate = refreshRate ?? nil
         snapshot = s
         history.append(s, at: Date().timeIntervalSinceReferenceDate)
     }
