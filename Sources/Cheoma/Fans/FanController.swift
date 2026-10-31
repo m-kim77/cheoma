@@ -68,7 +68,13 @@ final class FanController: ObservableObject {
     private var connection: NSXPCConnection?
     private var keepAliveTimer: Timer?
     private var verifyWork: DispatchWorkItem?
+    /// appliedRPMs를 마지막으로 바꾼 시각 (팬이 목표에 닿을 시간을 줬는지 볼 때)
+    private var appliedAt = Date.distantPast
     private var pendingReconcile: DispatchWorkItem?
+    /// 온도별 모드에서 마지막으로 고른 RPM. 식는 중에 3°C를 더 기다릴 기준인데, appliedRPMs를 쓰면
+    /// 고정에서 온도별로 바꿀 때 고정 속도가 기준이 돼서 그 속도에 묶인다
+    private var curveRPM: Double?
+    private var wakeObserver: NSObjectProtocol?
     private let smc: SMC?
 
     private enum Key {
@@ -102,11 +108,19 @@ final class FanController: ObservableObject {
         curve = Self.nonDecreasing(savedCurve?.count == Self.curveTemperatures.count ? savedCurve! : Self.defaultCurve(for: limits))
         curveStyle = defaults.string(forKey: Key.curveStyle).flatMap(CurveStyle.init) ?? .linear
         helperState = Self.installedState()
+
+        // 잠자는 동안 도우미가 되돌렸을 수 있으니 깨어나면 바로 상태를 물어 맞춘다
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.sendKeepAlive() }
+        }
     }
 
     // MARK: - 모드
 
     func setMode(_ mode: Mode) {
+        if mode != self.mode { curveRPM = nil }
         self.mode = mode
         UserDefaults.standard.set(mode.rawValue, forKey: Key.mode)
         message = nil
@@ -248,11 +262,15 @@ final class FanController: ObservableObject {
     private func curveTarget(at temperature: Double) -> [Double]? {
         guard let range = rpmRange else { return nil }
         var rpm = Self.curveRPM(at: temperature, values: curve, style: curveStyle)
-        if let current = appliedRPMs?.max(), rpm < current {
+        if let current = curveRPM, rpm < current {
             rpm = min(current, Self.curveRPM(at: temperature + Self.hysteresis, values: curve, style: curveStyle))
         }
-        guard rpm >= range.lowerBound else { return nil }
+        guard rpm >= range.lowerBound else {
+            curveRPM = nil
+            return nil
+        }
         let target = min(Self.rounded(rpm), range.upperBound)
+        curveRPM = target
         return fanLimits.map { _ in target }
     }
 
@@ -276,22 +294,35 @@ final class FanController: ObservableObject {
     }
 
     private func apply(_ rpms: [Double]?) {
-        verifyWork?.cancel()
         appliedRPMs = rpms
+        appliedAt = Date()
         updateKeepAlive()
-        let proxy = remoteProxy { [weak self] error in
-            self?.fail("도우미에 연결하지 못했어요. 다시 설치해보세요.", detail: error.localizedDescription)
+        if rpms == nil {
+            verifyWork?.cancel()
+            verifyWork = nil
         }
+        let proxy = remoteProxy { [weak self] error in self?.connectionFailed(error) }
         proxy?.setFanSpeeds(rpms?.map { NSNumber(value: $0) }) { [weak self] error in
             Task { @MainActor in
                 guard let self else { return }
                 if let error {
                     self.fail(error)
-                } else if let rpms {
-                    self.scheduleVerification(rpms)
+                } else if rpms != nil {
+                    self.scheduleVerification()
                 }
             }
         }
+    }
+
+    /// 도우미가 재시작하는 중(연결 중단)이면 다음 측정 때 다시 적용하고, 아예 연결할 수 없을 때만 실패로 본다
+    private func connectionFailed(_ error: Error) {
+        if (error as NSError).code == NSXPCConnectionInterrupted {
+            AppLog.write("팬: 도우미 연결이 잠깐 끊김, 다시 적용함")
+            appliedRPMs = nil
+            updateKeepAlive()
+            return
+        }
+        fail("도우미에 연결하지 못했어요. 다시 설치해보세요.", detail: error.localizedDescription)
     }
 
     /// 도우미가 거절하거나 팬이 따라오지 않으면 자동으로 돌리고 이유를 보여준다.
@@ -304,20 +335,39 @@ final class FanController: ObservableObject {
         report(text, detail: detail)
     }
 
-    /// 앱을 끌 때: 도우미는 연결이 끊기면 알아서 되돌리지만, 확실하게 자동으로 돌려놓고 끝낸다 (고른 모드는 기억해 둔다)
+    /// 앱을 끌 때: 도우미는 연결이 끊기면 알아서 되돌리지만, 확실하게 자동으로 돌려놓고 끝낸다 (고른 모드는 기억해 둔다).
+    /// 도우미가 답하지 않아도 앱이 안 꺼지는 일이 없도록 1초까지만 기다린다
     func restoreAutomaticBeforeQuit() {
         guard appliedRPMs != nil, let connection else { return }
-        let proxy = connection.synchronousRemoteObjectProxyWithErrorHandler { _ in } as? FanHelperProtocol
-        proxy?.setFanSpeeds(nil) { _ in }
+        let done = DispatchSemaphore(value: 0)
+        let proxy = connection.remoteObjectProxyWithErrorHandler { _ in done.signal() } as? FanHelperProtocol
+        proxy?.setFanSpeeds(nil) { _ in done.signal() }
+        _ = done.wait(timeout: .now() + 1)
     }
 
-    /// SMC가 수동 설정을 받아들였는지 실제 RPM으로 확인한다 (팬이 목표 속도에 닿는 데 몇 초 걸린다)
-    private func scheduleVerification(_ targets: [Double]) {
+    /// 팬이 목표 속도에 닿는 데 걸리는 시간
+    private nonisolated static let verificationDelay: TimeInterval = 8
+
+    /// SMC가 수동 설정을 받아들였는지 실제 RPM으로 확인한다. 온도별 모드처럼 목표가 자주 바뀌어도
+    /// 확인이 끝없이 미뤄지지 않게, 이미 잡힌 확인은 그대로 두고 그때 걸려 있는 목표로 확인한다
+    private func scheduleVerification(after delay: TimeInterval = verificationDelay) {
+        guard verifyWork == nil else { return }
         let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated { self?.verify(targets) }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.verifyWork = nil
+                guard let targets = self.appliedRPMs else { return }
+                // 목표가 방금 바뀌었으면 팬이 따라올 시간을 더 준다
+                let waited = Date().timeIntervalSince(self.appliedAt)
+                if waited < Self.verificationDelay {
+                    self.scheduleVerification(after: Self.verificationDelay - waited)
+                } else {
+                    self.verify(targets)
+                }
+            }
         }
         verifyWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func verify(_ targets: [Double]) {
@@ -354,8 +404,13 @@ final class FanController: ObservableObject {
         if connection == nil {
             let connection = NSXPCConnection(machServiceName: FanHelper.machServiceName, options: .privileged)
             connection.remoteObjectInterface = FanHelper.makeInterface()
-            connection.invalidationHandler = { [weak self] in Task { @MainActor in self?.connectionLost() } }
-            connection.interruptionHandler = { [weak self] in Task { @MainActor in self?.connectionLost() } }
+            // 새 연결로 바꾼 뒤에 옛 연결의 알림이 늦게 와도 새 연결을 지우지 않도록 어느 연결인지 확인한다
+            connection.invalidationHandler = { [weak self, weak connection] in
+                Task { @MainActor in self?.connectionLost(connection, invalidated: true) }
+            }
+            connection.interruptionHandler = { [weak self, weak connection] in
+                Task { @MainActor in self?.connectionLost(connection, invalidated: false) }
+            }
             connection.resume()
             self.connection = connection
         }
@@ -365,11 +420,35 @@ final class FanController: ObservableObject {
         return proxy as? FanHelperProtocol
     }
 
-    private func connectionLost() {
+    /// 도우미가 재시작했거나(중단) 연결이 끝났을 때(무효). 도우미는 연결이 끊기면 스스로 자동으로 되돌리므로
+    /// 다음 온도 측정 때 지금 모드를 다시 적용한다. 중단된 연결은 XPC가 다시 이어 주지만 깔끔하게 새로 만든다
+    private func connectionLost(_ lost: NSXPCConnection?, invalidated: Bool) {
+        guard let lost, lost === connection else { return }
+        if !invalidated { lost.invalidate() }
         connection = nil
-        // 도우미는 연결이 끊기면 스스로 자동으로 되돌린다. 다음 온도 측정 때 지금 모드를 다시 적용한다.
         appliedRPMs = nil
         updateKeepAlive()
+    }
+
+    /// 수동 모드를 유지하라고 알리고, 도우미가 그사이 혼자 자동으로 되돌렸으면(응답 없음 · 잠자기 · 온도 한계) 화면과 설정을 맞춘다
+    private func sendKeepAlive() {
+        guard appliedRPMs != nil else { return }
+        remoteProxy { [weak self] error in self?.connectionFailed(error) }?.keepAlive { [weak self] isManual, overheated in
+            Task { @MainActor in self?.helperReported(isManual: isManual, overheated: overheated) }
+        }
+    }
+
+    private func helperReported(isManual: Bool, overheated: Bool) {
+        guard !isManual, appliedRPMs != nil else { return }
+        if overheated {
+            // 같은 설정을 바로 다시 걸면 또 한계에 닿으니 자동으로 두고 알린다
+            fail("CPU가 \(Int(FanHelper.thermalLimit))°C를 넘어서 (멈춤이면 \(Int(FanHelper.stoppedThermalLimit))°C) 팬을 자동으로 되돌렸어요.")
+        } else {
+            AppLog.write("팬: 도우미가 자동으로 되돌려 둔 것을 확인, 다시 적용함")
+            appliedRPMs = nil
+            updateKeepAlive()
+            reconcile()
+        }
     }
 
     private func updateKeepAlive() {
@@ -380,9 +459,7 @@ final class FanController: ObservableObject {
         }
         guard keepAliveTimer == nil else { return }
         let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.remoteProxy { _ in }?.keepAlive()
-            }
+            MainActor.assumeIsolated { self?.sendKeepAlive() }
         }
         RunLoop.main.add(timer, forMode: .common)
         keepAliveTimer = timer
@@ -392,65 +469,84 @@ final class FanController: ObservableObject {
 
     func installHelper() {
         guard let source = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("CheomaFanHelper"),
-              FileManager.default.fileExists(atPath: source.path),
-              let client = Self.clientPath else {
+              FileManager.default.fileExists(atPath: source.path) else {
             report("도우미 파일(CheomaFanHelper)을 찾지 못했어요. 앱과 같이 빌드해야 해요.")
+            return
+        }
+        guard let client = Self.clientRequirement, let helperRequirement = CodeSignature.designatedRequirement(ofFile: source) else {
+            report("앱이나 도우미의 코드 서명을 읽지 못했어요. 앱을 다시 내려받아 보세요.")
             return
         }
         let plist: [String: Any] = [
             "Label": FanHelper.label,
-            "ProgramArguments": [FanHelper.installedBinaryPath, "--allow-client", client,
+            "ProgramArguments": [FanHelper.installedBinaryPath, "--allow-requirement", client,
                                  "--helper-version", String(FanHelper.version)],
             "MachServices": [FanHelper.machServiceName: true],
             "StandardErrorPath": "/var/log/\(FanHelper.label).log",
         ]
+        guard let plistData = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) else {
+            report("설치 파일을 준비하지 못했어요")
+            return
+        }
 
-        // 관리자 권한 셸은 ~/Documents 같은 개인정보 보호 폴더를 읽지 못할 수 있어서,
-        // 필요한 파일을 먼저 사용자 임시 폴더(본인만 접근 가능)에 모아두고 거기서 설치한다
+        // 관리자 권한 셸은 ~/Documents 같은 개인정보 보호 폴더를 읽지 못할 수 있어서 도우미를 먼저 사용자 임시 폴더로 옮겨 둔다.
+        // 암호 창이 떠 있는 동안 이 파일은 바꿔치기될 수 있으므로, 관리자 셸은 이것을 root만 쓸 수 있는 폴더로 복사한 뒤
+        // 지금 잰 서명(ad-hoc이면 cdhash)과 같은지 확인하고 나서 설치한다. 설치 명령은 파일로 두지 않고 바로 넘긴다
         let staging = FileManager.default.temporaryDirectory
             .appendingPathComponent("CheomaFanHelperInstall-\(UUID().uuidString)", isDirectory: true)
         let stagedBinary = staging.appendingPathComponent("helper")
-        let stagedPlist = staging.appendingPathComponent("\(FanHelper.label).plist")
-        let installScript = staging.appendingPathComponent("install.sh")
-        let script = [
-            "#!/bin/sh",
-            "set -e",
-            "launchctl bootout system/\(FanHelper.label) 2>/dev/null || true",
-            "mkdir -p /Library/PrivilegedHelperTools",
-            "install -o root -g wheel -m 755 \(Self.quoted(stagedBinary.path)) \(Self.quoted(FanHelper.installedBinaryPath))",
-            "install -o root -g wheel -m 644 \(Self.quoted(stagedPlist.path)) \(Self.quoted(FanHelper.launchDaemonPlistPath))",
-            "launchctl bootstrap system \(Self.quoted(FanHelper.launchDaemonPlistPath))",
-        ].joined(separator: "\n") + "\n"
         do {
             try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
             try FileManager.default.copyItem(at: source, to: stagedBinary)
-            try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(to: stagedPlist)
-            try script.write(to: installScript, atomically: true, encoding: .utf8)
         } catch {
             try? FileManager.default.removeItem(at: staging)
             report("설치 파일을 준비하지 못했어요: \(error.localizedDescription)")
             return
         }
+        let command = Self.installCommand(stagedBinary: stagedBinary.path, helperRequirement: helperRequirement,
+                                          plist: plistData)
 
         // 예전 도우미와 연결돼 있었다면 끊고 새로 연결한다
         connection?.invalidate()
         connection = nil
+        appliedRPMs = nil
+        updateKeepAlive()
         helperState = .working
         message = nil
         AppLog.write("팬 도우미 설치 시작 (허용할 앱: \(client), 버전 \(FanHelper.version))")
-        runAsAdministrator("/bin/sh \(Self.quoted(installScript.path))",
-                           prompt: "Cheoma가 팬 속도를 바꾸는 도우미를 설치하려고 합니다.") { [weak self] error in
+        runAsAdministrator(command, prompt: "Cheoma가 팬 속도를 바꾸는 도우미를 설치하려고 합니다.") { [weak self] error in
             guard let self else { return }
             try? FileManager.default.removeItem(at: staging)
             self.helperState = Self.installedState()
             if let error {
-                self.report(Self.describe(error), detail: error)
+                self.report(error.contains("CSSMERR") || error.contains("does not satisfy")
+                            ? "도우미 파일이 설치 도중 바뀌어서 설치를 멈췄어요. 다시 해 보세요." : Self.describe(error),
+                            detail: error)
             } else {
                 AppLog.write("팬 도우미 설치 완료")
                 // 기억해 둔 모드가 있으면 바로 이어서 적용한다
                 self.reconcile()
             }
         }
+    }
+
+    /// 관리자 셸에서 돌릴 설치 명령. 사용자가 쓸 수 있는 곳의 파일은 root 폴더로 복사한 다음에만 쓰고,
+    /// launchd 설정(plist)은 base64로 명령 안에 넣는다
+    static func installCommand(stagedBinary: String, helperRequirement: String, plist: Data) -> String {
+        [
+            "set -e",
+            "umask 077",
+            "tmp=$(/usr/bin/mktemp -d /private/var/tmp/cheoma-helper.XXXXXX)",
+            "trap '/bin/rm -rf \"$tmp\"' EXIT",
+            "/bin/cp \(quoted(stagedBinary)) \"$tmp/helper\"",
+            "/usr/bin/codesign --verify --strict -R \(quoted("=" + helperRequirement)) \"$tmp/helper\"",
+            "printf '%s' \(quoted(plist.base64EncodedString())) | /usr/bin/base64 -D > \"$tmp/plist\"",
+            "/bin/launchctl bootout system/\(FanHelper.label) 2>/dev/null || true",
+            "/bin/mkdir -p /Library/PrivilegedHelperTools",
+            "/usr/bin/install -o root -g wheel -m 755 \"$tmp/helper\" \(quoted(FanHelper.installedBinaryPath))",
+            "/usr/bin/install -o root -g wheel -m 644 \"$tmp/plist\" \(quoted(FanHelper.launchDaemonPlistPath))",
+            "/bin/launchctl bootstrap system \(quoted(FanHelper.launchDaemonPlistPath))",
+        ].joined(separator: "; ")
     }
 
     func uninstallHelper() {
@@ -473,10 +569,11 @@ final class FanController: ObservableObject {
         }
     }
 
-    /// 도우미가 연결을 허용할 앱 실행 파일 (설치할 때 이 경로를 넘긴다)
-    private static var clientPath: String? { Bundle.main.executableURL?.resolvingSymlinksInPath().path }
+    /// 도우미가 연결을 허용할 이 앱의 코드 서명 요구사항 (설치할 때 넘긴다). 인증서로 서명한 빌드는 다시 빌드하거나
+    /// 옮겨도 같고, ad-hoc 서명 빌드는 업데이트할 때마다 바뀐다
+    private static let clientRequirement = CodeSignature.designatedRequirementOfSelf()
 
-    /// 설치된 도우미를 이 앱이 쓸 수 있는지. 앱 위치가 바뀌었거나(개발용 빌드에서 설치했던 경우 등)
+    /// 설치된 도우미를 이 앱이 쓸 수 있는지. 앱의 서명이 바뀌었거나(ad-hoc 서명 빌드를 업데이트했을 때 등)
     /// 도우미가 새 버전으로 바뀌었으면 다시 설치해야 한다.
     private static func installedState() -> HelperState {
         guard let data = FileManager.default.contents(atPath: FanHelper.launchDaemonPlistPath) else { return .notInstalled }
@@ -485,11 +582,11 @@ final class FanController: ObservableObject {
         func value(after flag: String) -> String? {
             arguments.firstIndex(of: flag).flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil }
         }
-        guard value(after: "--allow-client") == clientPath else {
-            return .needsReinstall("앱 위치가 바뀌어서 도우미를 다시 설치해야 해요")
-        }
         guard value(after: "--helper-version") == String(FanHelper.version) else {
             return .needsReinstall("도우미가 새 버전으로 바뀌어서 다시 설치해야 해요")
+        }
+        guard let client = clientRequirement, value(after: "--allow-requirement") == client else {
+            return .needsReinstall("앱이 바뀌어서(업데이트 등) 도우미를 다시 설치해야 해요")
         }
         return .installed
     }
@@ -561,15 +658,18 @@ final class FanController: ObservableObject {
         process.arguments = ["-e", "do shell script \"\(escape(shell))\" with prompt \"\(escape(prompt))\" with administrator privileges"]
         let errorPipe = Pipe()
         process.standardError = errorPipe
-        process.terminationHandler = { finished in
-            let output = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            let status = finished.terminationStatus
-            Task { @MainActor in completion(status == 0 ? nil : output) }
-        }
         do {
             try process.run()
         } catch {
             completion(error.localizedDescription)
+            return
+        }
+        // 끝나기를 기다렸다가 읽으면 출력이 파이프 버퍼(64KB)를 넘을 때 서로 기다리며 멈추므로, 읽으면서 기다린다
+        DispatchQueue.global(qos: .userInitiated).async {
+            let output = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            process.waitUntilExit()
+            let status = process.terminationStatus
+            Task { @MainActor in completion(status == 0 ? nil : output) }
         }
     }
 

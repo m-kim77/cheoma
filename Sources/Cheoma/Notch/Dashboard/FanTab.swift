@@ -227,6 +227,13 @@ private struct FixedControls: View {
                 .foregroundStyle(.tertiary)
                 .monospacedDigit()
         }
+        // 끄는 중에 마우스가 노치 밖으로 나가 대시보드가 닫히면 손을 뗀 것으로 보고 저장한다
+        .onDisappear(perform: commitDrafts)
+    }
+
+    private func commitDrafts() {
+        for (key, value) in drafts { controller.setFixedRPM(value, fan: key < 0 ? nil : key) }
+        drafts = [:]
     }
 
     private func sliderRow(label: String, fan: Int?) -> some View {
@@ -386,6 +393,13 @@ private struct CurveEditor: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
+        }
+        // 끄는 중에 대시보드가 닫히면 그때까지 끈 모양을 저장한다
+        .onDisappear {
+            if let draft { controller.setCurve(draft) }
+            draft = nil
+            dragIndex = nil
+            dragStart = nil
         }
     }
 
