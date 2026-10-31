@@ -8,6 +8,7 @@ struct AgentsSessionDetail: View {
     let model: NotchModel
     /// "다른 계정으로" 단추를 눌러 이어서 하기 단추들을 펼쳤다
     @State private var showsResume = false
+    @AppStorage(AgentsScreenTextSize.defaultsKey) private var screenTextSize = AgentsScreenTextSize.fit
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -17,10 +18,16 @@ struct AgentsSessionDetail: View {
                 AgentsResumeOptions(target: target, currentAccount: session.account, includesCurrent: session.state == .exited,
                                     store: store) { showsResume = false }
             }
-            AgentScreenPreview(screen: session.screen, placeholder: placeholder)
+            AgentScreenPreview(screen: session.screen, placeholder: placeholder, textSize: screenTextSize)
                 .equatable()
                 .frame(minHeight: 54, maxHeight: .infinity)
                 .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(alignment: .topTrailing) {
+                    if session.screen != nil {
+                        AgentsScreenTextSizeButtons(size: $screenTextSize)
+                            .padding(5)
+                    }
+                }
             if let choices = session.analysis?.choices, !choices.isEmpty, session.location.canReply {
                 choiceList(choices)
             }
@@ -159,11 +166,13 @@ struct AgentsSessionDetail: View {
 struct AgentScreenPreview: View, Equatable {
     let screen: TerminalScreen?
     let placeholder: String
+    /// 글자 크기 (pt). `AgentsScreenTextSize.fit`이면 가장 긴 줄이 들어가게 맞춘다
+    let textSize: Double
     @Environment(\.agentsScale) private var scale
-    
-    // 바뀌었는지는 화면 글자로만 본다 (배율이 바뀌면 환경 값이 바뀌어 다시 그려진다)
-    static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.screen == rhs.screen && lhs.placeholder == rhs.placeholder
+
+    // 바뀌었는지는 화면 글자와 글자 크기로만 본다 (탭 글자 배율이 바뀌면 환경 값이 바뀌어 다시 그려진다)
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.screen == rhs.screen && lhs.placeholder == rhs.placeholder && lhs.textSize == rhs.textSize
     }
 
     private static let inset = EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
@@ -173,10 +182,14 @@ struct AgentScreenPreview: View, Equatable {
             GeometryReader { geo in
                 let width = max(geo.size.width - Self.inset.leading - Self.inset.trailing, 1)
                 let height = max(geo.size.height - Self.inset.top - Self.inset.bottom, 1)
+                let fits = textSize == AgentsScreenTextSize.fit
                 Text(prepared.attributed)
-                    .font(.system(size: Self.fontSize(width: width, columns: prepared.columns, scale: scale), design: .monospaced))
+                    .font(.system(size: fits ? Self.fontSize(width: width, columns: prepared.columns, scale: scale) : textSize,
+                                  design: .monospaced))
                     .foregroundStyle(.white.opacity(0.85))
-                    .fixedSize()
+                    // 맞춤은 줄을 그대로 두고, 크기를 고르면 폭을 넘는 줄을 다음 줄로 넘긴다
+                    .fixedSize(horizontal: fits, vertical: true)
+                    .frame(width: fits ? nil : width, alignment: .leading)
                     .frame(width: width, height: height, alignment: .bottomLeading)
                     .clipped()
                     // clipped()는 그림만 자르고 누르는 자리는 그대로라, 위로 넘친 긴 화면이 위쪽 버튼(터미널로 가기 · 새 에이전트 · 톱니 · 탭)을 덮어 클릭을 먹었다
@@ -230,6 +243,43 @@ struct AgentScreenPreview: View, Equatable {
             }
             return width
         }
+    }
+}
+
+/// 터미널 미리보기 글자 크기를 한 단계씩 바꾼다 (미리보기 오른쪽 위)
+struct AgentsScreenTextSizeButtons: View {
+    @Binding var size: Double
+
+    var body: some View {
+        let steps = AgentsScreenTextSize.steps
+        let index = steps.firstIndex(of: size) ?? 0
+        HStack(spacing: 1) {
+            step("minus", label: "터미널 글자 작게", enabled: index > 0) { size = steps[index - 1] }
+            Text(AgentsScreenTextSize.title(size))
+                .agentsFont(size: 9, weight: .semibold)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .fixedSize()
+            step("plus", label: "터미널 글자 크게", enabled: index < steps.count - 1) { size = steps[index + 1] }
+        }
+        .padding(.horizontal, 3)
+        // 미리보기 글자 위에 떠 있어서 거의 불투명하게
+        .background(Color(white: 0.1).opacity(0.95), in: Capsule())
+        .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 1))
+        .help("터미널 화면 글자 크기 · 맞춤은 가장 긴 줄이 들어가게 줄여요")
+    }
+
+    private func step(_ symbol: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .agentsFont(size: 8, weight: .bold)
+                .agentsFrame(width: 16, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 0.9 : 0.3)
+        .accessibilityLabel(label)
     }
 }
 

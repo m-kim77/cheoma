@@ -65,6 +65,7 @@ struct SettingsView: View {
 
 private struct GeneralSettings: View {
     @ObservedObject var model: NotchModel
+    @AppStorage(AgentsScreenTextSize.defaultsKey) private var screenTextSize = AgentsScreenTextSize.fit
     @State private var warnings = WarningAlerts.isEnabled
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
@@ -81,6 +82,13 @@ private struct GeneralSettings: View {
                 Picker("글자 크기", selection: $model.agentsTextScale) {
                     ForEach(AgentsTextScale.allCases, id: \.self) { Text("\($0.title) · \($0.percent)").tag($0) }
                 }
+                Picker("터미널 화면 글자", selection: $screenTextSize) {
+                    ForEach(AgentsScreenTextSize.steps, id: \.self) { Text(AgentsScreenTextSize.title($0)).tag($0) }
+                }
+                Text(screenTextSize == AgentsScreenTextSize.fit
+                     ? "맞춤: 가장 긴 줄이 들어가게 글자를 줄여요"
+                     : "폭을 넘는 줄은 다음 줄로 넘겨요. 미리보기 오른쪽 위 − + 로도 바꿔요")
+                    .foregroundStyle(.secondary)
                 LabeledContent("탭 크기", value: "\(Int(model.agentsSize.width)) × \(Int(model.agentsSize.height))")
                 HStack {
                     Text("노치를 펼친 뒤 오른쪽 아래 모서리를 끌어서 바꿔요")

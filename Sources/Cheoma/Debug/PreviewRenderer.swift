@@ -129,8 +129,20 @@ enum PreviewRenderer {
                        to: folder.appendingPathComponent("\(prefix)-\(name).png"))
             }
         }
-        // 글자 크기를 키운 모습 (탭도 기본 크기 × 배율로 커진다)
         model.theme = .basic
+        // 터미널 미리보기 글자를 따로 키운 모습 (폭을 넘는 줄은 다음 줄로)
+        let defaults = UserDefaults.standard
+        let savedScreenSize = defaults.object(forKey: AgentsScreenTextSize.defaultsKey)
+        for size in [14.0, 18.0] {
+            defaults.set(size, forKey: AgentsScreenTextSize.defaultsKey)
+            AgentsTab.previewPane = .session
+            agents.select("terminal:/dev/ttys004")
+            model.previewOpen(.agents)
+            render(NotchView(model: model, stats: stats, fans: fans, agents: agents),
+                   to: folder.appendingPathComponent("agents-screen-\(Int(size))pt.png"))
+        }
+        defaults.set(savedScreenSize, forKey: AgentsScreenTextSize.defaultsKey)
+        // 글자 크기를 키운 모습 (탭도 기본 크기 × 배율로 커진다)
         for scale in [AgentsTextScale.larger, .largest] {
             withTextScale(scale, model: model) {
                 for (name, store, pane, selection) in agentVariants(agents: agents, empty: empty)

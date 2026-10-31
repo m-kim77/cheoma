@@ -207,6 +207,18 @@ enum AgentsTextScale: Double, CaseIterable {
     var percent: String { "\(Int((rawValue * 100).rounded()))%" }
 }
 
+/// 터미널 미리보기 글자 크기 (pt). 탭 글자 크기와 따로 고른다
+enum AgentsScreenTextSize {
+    static let defaultsKey = "agents.screenTextSize"
+    /// 가장 긴 줄이 폭에 들어가게 맞춘다 (8~10pt × 탭 글자 배율)
+    static let fit: Double = 0
+    static let steps: [Double] = [fit, 11, 12, 13, 14, 16, 18, 20]
+
+    static func title(_ size: Double) -> String {
+        size == fit ? "맞춤" : "\(Int(size))pt"
+    }
+}
+
 private struct AgentsScaleKey: EnvironmentKey {
     static let defaultValue: CGFloat = 1
 }
