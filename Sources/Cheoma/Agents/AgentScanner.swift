@@ -8,13 +8,11 @@ enum AgentScanner {
     /// 지금 도는 에이전트 프로세스 전부. 백그라운드 큐에서 몇 초마다 부르므로 가볍게 (몇 ms 안)
     static func scan() -> [AgentProcess] {
         let uid = getuid()
-        let t0 = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
         var table: [pid_t: Entry] = [:]
         for pid in allPIDs() where pid > 0 {
             if let entry = shortInfo(pid) { table[pid] = entry }
         }
 
-        let tA = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
         var found: [pid_t: AgentKind] = [:]
         for (pid, entry) in table where entry.uid == uid && isCandidate(entry.name) {
             let path = executablePath(of: pid)
@@ -22,7 +20,6 @@ enum AgentScanner {
             found[pid] = kind
         }
 
-        let tB = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
         var hosts: [pid_t: String?] = [:]  // 여러 에이전트가 같은 Terminal · tmux 서버를 거치므로 한 번만 읽는다
         var result: [AgentProcess] = []
         for (pid, kind) in found {
@@ -40,8 +37,6 @@ enum AgentScanner {
             result.append(AgentProcess(pid: pid, kind: kind, tty: tty, cwd: workingDirectory(of: pid),
                                        startedAt: startedAt, hostApp: host))
         }
-        let tC = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
-        print("PROFILE table", Double(tA - t0)/1e6, "kinds", Double(tB - tA)/1e6, "details", Double(tC - tB)/1e6)
         return result.sorted { ($0.startedAt ?? .distantPast, $0.pid) < ($1.startedAt ?? .distantPast, $1.pid) }
     }
 

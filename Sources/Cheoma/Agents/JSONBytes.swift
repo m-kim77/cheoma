@@ -376,7 +376,7 @@ enum JSONLFile {
 
     static func stat(_ path: String) -> Stat? {
         var info = Darwin.stat()
-        guard Darwin.stat(path, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG else { return nil }
+        guard fstatat(AT_FDCWD, path, &info, 0) == 0, (info.st_mode & S_IFMT) == S_IFREG else { return nil }
         let mtime = Double(info.st_mtimespec.tv_sec) + Double(info.st_mtimespec.tv_nsec) / 1e9
         return Stat(inode: UInt64(info.st_ino), size: Int64(info.st_size), mtime: mtime)
     }
@@ -395,7 +395,7 @@ enum JSONLFile {
             let isDirectory: Bool
             if type == DT_UNKNOWN || type == DT_LNK {
                 var info = Darwin.stat()
-                isDirectory = Darwin.stat(path + "/" + name, &info) == 0 && (info.st_mode & S_IFMT) == S_IFDIR
+                isDirectory = fstatat(AT_FDCWD, path + "/" + name, &info, 0) == 0 && (info.st_mode & S_IFMT) == S_IFDIR
             } else {
                 isDirectory = type == DT_DIR
             }

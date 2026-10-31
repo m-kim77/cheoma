@@ -3,7 +3,7 @@
 작업이 끝날 때마다 갱신한다. "지금 상태"와 "남은 일"은 그때그때 고쳐 쓰고, 한 일은 "작업 기록"에 날짜별로 쌓는다.
 사용법은 [README](../README.md), 만들면서 알아낸 기술적인 내용은 [NOTES.md](NOTES.md), 배포 계획은 [DISTRIBUTION.md](DISTRIBUTION.md)에 있다.
 
-마지막 갱신: 2026-10-31 13:40
+마지막 갱신: 2026-10-31 13:45
 
 ## 지금 상태
 
@@ -67,27 +67,31 @@
 - 앱 탭은 내 계정 프로세스만 보인다. WindowServer, kernel_task 같은 시스템 프로세스는 권한이 없어 빠진다 (이 맥에서는 1004개 중 637개를 읽을 수 있었다).
 - 앱 탭의 "CPU 전력"은 CPU 몫만 추정한 값이다. GPU를 많이 쓰는 앱(게임, LLM)은 실제보다 작게 나온다.
 
-## 이어서 할 일: 에이전트 탭 (2026-10-30 저녁에 멈춤)
+## 이어서 할 일: 에이전트 탭
 
 노치에 코드 에이전트(Claude Code · Codex · OpenCode · pi) 탭을 넣는 중이다. 사용자가 고른 방식: **Terminal.app + tmux**, 첫 버전에 목록·상태·알림, 미리보기·답·선택지, 새 에이전트 실행, 사용량을 모두 넣는다.
 
-- 기준 브랜치 `agents` (d136a13, 빌드 통과): 공통 타입(`Sources/Cheoma/Agents/AgentModels.swift`), 모듈별 틀(서명 고정), 실제 `AgentStore`(세션 찾기·상태 판단·알림·보내기·실행), 알림 → 에이전트 탭 열기, Apple Events entitlement(`Support/Cheoma.entitlements`)와 `NSAppleEventsUsageDescription`.
-- 서브에이전트 4개가 각자 워크트리에서 만들다가 멈췄다. 작업은 브랜치에 WIP 커밋으로 남겼다 (빌드 확인 안 함):
-
-| 브랜치 | 워크트리 (`.claude/worktrees/…`) | 맡은 일 | 멈춘 곳 |
-|---|---|---|---|
-| `agents-bridges` (162c20a) | `agent-a1b019708446e06c9` | `AgentScanner`(libproc), `TerminalAppBridge`(osascript), `TmuxBridge`, `--agents` | 덤프·셀프테스트 작성 중 |
-| `agents-parser` (bce8b82) | `agent-a5cecb63518a133f2` | `AgentScreenParser`, `ANSIText`, `--parse-screen`, 실제 화면 모음 `scripts/agent-screens/` | 화면만 모았고 파서 코드는 아직 |
-| `agents-usage` (f70bb5e) | `agent-af1c3968cec9591a8` | `AgentUsageReader`(Codex rate_limits, Claude 비용·토큰), `AgentHooks`, `HookInstaller`, `--usage` | 기록 읽기 일부, 훅·설치기는 아직 |
-| `agents-ui` (6df72d7) | `agent-adaaba1cef8a71dd0` | 에이전트 탭 화면(`Agents*.swift`), 노치 키보드 입력, `--render` | 화면 파일 대부분, 렌더 추가 중 |
-
-- 이어서 하는 법: 각 브랜치를 `agents`에 합치고(서로 다른 파일만 고쳐서 충돌이 거의 없다) `swift build`로 고친 뒤, 못 끝낸 부분을 마저 만든다. 서브에이전트에 준 지시는 이 세션 기록에 있고, 계약은 `AgentModels.swift`와 각 틀 파일의 주석이다.
+- 2026-10-31에 WIP 브랜치 4개(`agents-bridges` · `agents-parser` · `agents-usage` · `agents-ui`)를 `agents`에 합쳤다. 충돌 없음, 빌드·경고 0, 단위 테스트 28개 통과.
+- 된 것
+  - `AgentStore`(세션 찾기·상태 판단·알림·보내기·실행), 알림 → 에이전트 탭 열기, Apple Events entitlement
+  - 프로세스 찾기(`AgentScanner`, 이 맥에서 15개를 25ms에), `TerminalAppBridge`, `TmuxBridge`. `Cheoma --agents`, `--agents --selftest` 모두 통과
+  - 에이전트 탭 화면(목록·상세·선택지·답 입력·새 에이전트·설정·사용량 줄): `--render`의 미리보기 데이터로 기본·광화문 테마 모두 그려지고 넘침 없음
+  - Codex 기록(`CodexRollouts`)과 Claude 기록(`ClaudeTranscripts`) 읽기, 가벼운 JSON 읽기(`JSONBytes`)
+- 남은 것
+  - 화면 파서: `AgentScreenParser`, `ANSIText`, `--parse-screen`은 아직 틀이다. 실제 화면 39개가 `scripts/agent-screens/`에 있다
+  - 사용량: `--usage`가 아직 "준비 중"을 찍는다 (`UsageDump`). 기록 읽기와 화면 연결 확인 필요
+  - 훅: `AgentHooks`, `HookInstaller`가 틀이다 (Claude Notification·Stop 훅으로 상태를 바로 받기)
+  - 실제 Terminal.app · tmux 세션으로 보내기·선택지 고르기·새 에이전트 실행 확인, 앱에 넣어 설치
+- 계약은 `AgentModels.swift`와 각 틀 파일의 주석이다.
+- 원래 워크트리(`.claude/worktrees/`)에는 에이전트 탭과 상관없는, 커밋하지 않은 작업이 있는 것들이 있다 (`055ba92` 위: 잠자기 방지 단축키, GPU 앱 사용량, 타이머 탭, 장치 이벤트). 지우지 말 것.
 - 확인한 사실: Codex 기록(`~/.codex/sessions/**/rollout-*.jsonl`)의 `token_count` 이벤트에 5시간·주간 사용 %가 있다. Claude의 남은 한도는 문서상 statusLine 입력의 `rate_limits`(five_hour, seven_day)로만 받을 수 있다. Claude 훅 Notification에는 `notification_type`(permission_prompt ~6초 뒤, idle_prompt ~60초 뒤)이 있고, Stop에는 `last_assistant_message`가 있다. `claude agents --json`도 세션 상태를 준다 (대화형 세션이 보이는지는 시험 필요).
 - Terminal.app은 `do script`가 늘 Enter를 같이 보내고 특수 키는 못 보낸다. tmux는 다 된다. Terminal 자동화 권한은 사용자가 버튼을 눌렀을 때만 묻는다.
 
 ## 작업 기록
 
 ### 2026-10-31
+
+- 13:45 에이전트 탭: WIP 브랜치 4개를 `agents`에 합침. 빌드 오류는 `JSONBytes`의 `Darwin.stat(...)`이 구조체 생성자로 해석된 것 하나뿐이라 `fstatat`으로 바꿈. `AgentScanner`에 남아 있던 시간 측정 출력을 지움. `--agents --selftest` 통과, `--render`로 에이전트 탭 7가지 상태를 두 테마로 그려 확인
 
 - 13:40 main(`b45017b`)을 Apple Development 서명으로 빌드해 `~/Applications/Cheoma.app`에 설치 (예전 v0.1.0 ad-hoc 앱은 SIGTERM으로 기록을 저장하고 끈 뒤 바꿈, 예전 권한은 `tccutil reset`). (직접 확인) 손쉬운 사용 권한을 다시 주고 팬 도우미 v4를 설치. 멈춤 · 자동 · 고정 3200/3400/2200/1800 RPM이 모두 적용되고 확인 실패 없음. 가려진 아이콘 목록도 읽힌다
 - 12:55 10/30 점검 목록([ISSUES.md](ISSUES.md))을 고침. main에서 `fixes` 브랜치로 작업해서 main에 합침. 고친 것:
