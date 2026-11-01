@@ -9,6 +9,7 @@ enum AgentsStyle {
         case .opencode: "curlybraces"
         case .pi: "pi"
         case .hermes: "wind"
+        case .antigravity: "arrow.up.to.line.compact"
         case .gemini: "sparkles"
         case .aider: "wrench.and.screwdriver"
         }
@@ -21,6 +22,7 @@ enum AgentsStyle {
         case .opencode: Color(red: 0.70, green: 0.62, blue: 0.95)
         case .pi: Color(red: 0.95, green: 0.82, blue: 0.45)
         case .hermes: Color(red: 0.92, green: 0.58, blue: 0.78)
+        case .antigravity: Color(red: 0.45, green: 0.80, blue: 0.95)
         case .gemini: Color(red: 0.50, green: 0.68, blue: 1.0)
         case .aider: Color(red: 0.55, green: 0.85, blue: 0.50)
         }

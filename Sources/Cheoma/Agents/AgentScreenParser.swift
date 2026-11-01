@@ -189,7 +189,7 @@ enum AgentScreenParser {
         let lower = line.lowercased()
         return lower.contains("enter to") || lower.contains("press enter") || lower.contains("esc to cancel")
             || lower.contains("to navigate") || lower.contains("esc to go back")
-            || (lower.contains("navigate") && lower.contains("select"))
+            || (lower.contains("navigate") && (lower.contains("select") || lower.contains("confirm")))
     }
 
     /// 이름 끝의 단축키 표시 "(y)", "(esc)", "(shift+tab)"를 뗀다
@@ -258,7 +258,7 @@ enum AgentScreenParser {
         let bottom = lines[max(0, lines.count - 8)...]
         if bottom.contains(where: { $0.contains("Press Ctrl-C again to exit") }) { return true }
         switch kind {
-        case .claude, .hermes:
+        case .claude, .hermes, .antigravity:
             // 구분선 사이의 "❯ " 줄
             return bottom.indices.contains { row in
                 isPromptLine(lines[row]) && row > 0 && isSeparator(lines[row - 1])
@@ -334,6 +334,8 @@ enum AgentScreenParser {
         let lower = text.lowercased()
         let markers = ["%/", "$0.", "shortcuts", "ctrl+", "esc to", "mode on", "/effort", "tmux", "warning:", "tip:",
                        "(no output)", "took ", "/bug", "/plugins", "/update", "/model", "? for", "http"]
+        // 모델 · 추론 수준 상태 줄 ("Gemini 3.8 Flash · high", Antigravity)
+        if ["· low", "· medium", "· high", "· xhigh", "· max"].contains(where: { lower.hasSuffix($0) }) { return true }
         return markers.contains { lower.contains($0) }
     }
 

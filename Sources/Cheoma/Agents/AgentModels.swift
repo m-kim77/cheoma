@@ -5,7 +5,7 @@ import Foundation
 
 /// 노치에서 지켜보는 코드 에이전트 종류
 enum AgentKind: String, CaseIterable, Codable, Sendable {
-    case claude, codex, opencode, pi, hermes, gemini, aider
+    case claude, codex, opencode, pi, hermes, antigravity, gemini, aider
 
     var displayName: String {
         switch self {
@@ -14,13 +14,15 @@ enum AgentKind: String, CaseIterable, Codable, Sendable {
         case .opencode: "OpenCode"
         case .pi: "pi"
         case .hermes: "Hermes"
+        case .antigravity: "Antigravity"
         case .gemini: "Gemini CLI"
         case .aider: "Aider"
         }
     }
 
     /// 새로 띄울 때 사용자 로그인 셸에서 실행하는 명령
-    var command: String { rawValue }
+    /// 실행 명령 (Antigravity CLI는 agy)
+    var command: String { self == .antigravity ? "agy" : rawValue }
 }
 
 /// 에이전트가 돌고 있는 터미널 자리

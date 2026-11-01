@@ -1,0 +1,40 @@
+
+      ▄▀▀▄
+     ▀▀▀▀▀▀
+    ▀▀▀▀▀▀▀▀
+   ▄▀▀    ▀▀▄
+  ▄▀▀      ▀▀▄
+
+  Antigravity CLI 1.4.12
+  mj7275181@gmail.com (Antigravity Starter Quota)
+  Gemini 3.8 Flash (High)
+  /private/tmp/claude-501/-Users-mjkim-Documents-project-M-mac-project-menu-bar/ed8ee0b0-131f-4bf9-bf3e-30af2bb56dbb/scr
+
+
+ ┃ Verbosity now defaults to medium
+ ┃ Verbosity is now medium by default, so tool calls and thoughts roll up into summaries. You can change your
+ ┃ preferred verbosity anytime in /config > Verbosity.
+ ┃ esc to dismiss
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> Create a file named a.txt containing hi, then reply done.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                 Gemini 3.8 Flash · high
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -112,7 +112,7 @@ Cheoma는 맥의 노치에서 같은 일을 한다.
 
 ### 코드 에이전트
 
-**에이전트** 탭은 터미널에서 도는 코드 에이전트(Claude Code, Codex, OpenCode, pi, Hermes)를 지켜본다. 창을 뒤지지 않아도 어느 것이 나를 기다리는지 보인다.
+**에이전트** 탭은 터미널에서 도는 코드 에이전트(Claude Code, Codex, OpenCode, pi, Hermes, Antigravity CLI)를 지켜본다. 창을 뒤지지 않아도 어느 것이 나를 기다리는지 보인다.
 
 <p align="center">
   <img src="docs/images/agents.png" width="760" alt="에이전트 탭. 왼쪽은 상태가 붙은 세션 목록, 오른쪽은 진행할지 묻는 Claude Code 세션과 번호 붙은 선택지 세 개">

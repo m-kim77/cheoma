@@ -61,6 +61,7 @@ enum AgentsSelfTest {
             ("/opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python",
              ["/opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python",
               "/opt/homebrew/Cellar/hermes-agent/0.22.2/libexec/bin/hermes"], .hermes),
+            ("/Users/me/.local/bin/agy", ["agy"], .antigravity),
             // 에이전트가 아닌 것
             ("/opt/homebrew/bin/node", ["node", "/Users/me/app/server.js", "--root", "/Users/me/claude"], nil),
             ("/opt/homebrew/bin/node", ["node"], nil),

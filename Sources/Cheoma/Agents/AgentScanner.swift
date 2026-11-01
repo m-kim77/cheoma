@@ -83,7 +83,7 @@ enum AgentScanner {
 
     /// 바로 실행되는 에이전트 실행 파일 이름
     private static let nativeNames: [String: AgentKind] = [
-        "claude": .claude, "codex": .codex, "opencode": .opencode, "pi": .pi, "hermes": .hermes, "gemini": .gemini, "aider": .aider,
+        "claude": .claude, "codex": .codex, "opencode": .opencode, "pi": .pi, "hermes": .hermes, "agy": .antigravity, "gemini": .gemini, "aider": .aider,
     ]
 
     /// 인터프리터(node 등)로 도는 CLI: 스크립트 경로에 이 글자가 들어 있으면 그 종류

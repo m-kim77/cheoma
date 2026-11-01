@@ -14,7 +14,7 @@ Cheoma does the same for your MacBook's notch:
 - **Rings the chime.** Charger, unlock, overheating, low memory and low battery show up as small alerts around the notch.
 - **Watches the weather inside your Mac.** Hover over the notch to see CPU, GPU, memory, power, network, storage, temperatures and the apps using the most.
 - **Keeps things cool.** Set fan speeds yourself: a fixed RPM per fan, or a temperature curve.
-- **Calls you back to the agents.** See which Claude Code, Codex, OpenCode, pi or Hermes session is waiting for you, answer it from the notch, and keep an eye on your subscription limits.
+- **Calls you back to the agents.** See which Claude Code, Codex, OpenCode, pi, Hermes or Antigravity CLI (agy) session is waiting for you, answer it from the notch, and keep an eye on your subscription limits.
 
 **[Download Cheoma](https://github.com/m-kim77/cheoma/releases/latest/download/Cheoma.zip)** · free and open source · Apple Silicon · macOS 14 or later · the interface is in Korean (this page translates every label)
 
@@ -109,7 +109,7 @@ Safety:
 
 ### Coding agents
 
-The **에이전트** (Agents) tab watches the coding agents running in your terminal: Claude Code, Codex, OpenCode, pi and Hermes. You can see which one is waiting for you without hunting through windows.
+The **에이전트** (Agents) tab watches the coding agents running in your terminal: Claude Code, Codex, OpenCode, pi, Hermes and Antigravity CLI (agy). You can see which one is waiting for you without hunting through windows.
 
 <p align="center">
   <img src="docs/images/agents.png" width="760" alt="Agents tab: a list of agent sessions with their state, and a Claude Code session asking to proceed with three numbered choices">

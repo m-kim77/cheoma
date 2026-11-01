@@ -677,6 +677,7 @@ final class AgentStore: ObservableObject {
         case .opencode: "OpenCode"
         case .pi: "pi"
         case .hermes: "Hermes"
+        case .antigravity: "Antigravity"
         case .gemini: "Gemini"
         case .aider: "Aider"
         }

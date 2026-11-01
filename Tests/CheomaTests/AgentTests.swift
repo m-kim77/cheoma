@@ -30,6 +30,9 @@ final class AgentScreenParserTests: XCTestCase {
             "opencode-idle": .needsInput, "opencode-no-provider": .needsInput,
             "hermes-idle": .needsInput, "hermes-typed": .needsInput, "hermes-rate-limited": .needsInput,
             "hermes-working": .working, "hermes-working2": .working, "hermes-telemetry": .needsChoice,
+            "antigravity-idle": .needsInput, "antigravity-typed": .needsInput, "antigravity-finished": .needsInput,
+            "antigravity-working": .working, "antigravity-permission": .needsChoice, "antigravity-trust": .needsChoice,
+            "antigravity-trust-down": .needsChoice,
         ]
         for (name, state) in expected {
             XCTAssertEqual(try analyze(name).state, state, name)
@@ -52,6 +55,17 @@ final class AgentScreenParserTests: XCTestCase {
         XCTAssertEqual(analysis.choices.filter(\.isHighlighted).map(\.label), ["No thanks"])
         XCTAssertEqual(try analyze("hermes-working2").summary, "(¬‿¬) brainstorming...")
         XCTAssertTrue(try analyze("hermes-rate-limited").summary?.hasPrefix("ChatGPT or Codex Subscription rate-limited") ?? false)
+    }
+
+    func testAntigravityScreens() throws {
+        let trust = try analyze("antigravity-trust-down")
+        XCTAssertEqual(trust.question, "Do you trust the contents of this project?")
+        XCTAssertEqual(trust.choices.map(\.label), ["Yes, I trust this folder", "No, exit"])
+        XCTAssertEqual(trust.choices.filter(\.isHighlighted).map(\.label), ["No, exit"])
+        let permission = try analyze("antigravity-permission")
+        XCTAssertEqual(permission.question, "Allow creation of this file?")
+        XCTAssertEqual(permission.choices.map(\.key), ["1", "2"])
+        XCTAssertEqual(try analyze("antigravity-finished").summary, "done.")
     }
 
     func testClaudeQuestionSkipsDescriptionsAndSeparator() throws {

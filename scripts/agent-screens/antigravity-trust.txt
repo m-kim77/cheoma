@@ -1,0 +1,40 @@
+Accessing workspace:
+
+/private/tmp/claude-501/-Users-mjkim-Documents-project-M-mac-project-menu-bar/ed8ee0b0-131f-4bf9-bf3e-
+30af2bb56dbb/scratchpad/agywork
+
+Do you trust the contents of this project?
+
+Antigravity CLI requires permission to read, edit, and execute files here.
+
+> Yes, I trust this folder
+  No, exit
+
+  ↑/↓ Navigate · enter Confirm
+                                                                                                 Gemini 3.8 Flash · high
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
