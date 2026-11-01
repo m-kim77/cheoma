@@ -9,21 +9,26 @@ struct AgentsUsageStrip: View {
 
     var body: some View {
         // 자리가 모자라면 Codex를 작은 막대로, 단추를 아이콘만, Claude 비용은 토큰 수를 빼고, 그래도 모자라면 앞의 계정만 보여준다.
-        // 계정은 되도록 다 보이게 단추부터 줄인다
+        // 계정은 되도록 다 보이게 단추부터 줄인다. Codex 계정이 여럿이면 Claude처럼 한 카드에 계정마다 한 줄
+        let codex = usage.codex.filter { $0.usage?.primary != nil || $0.usage?.secondary != nil }
+        let named = codex.count > 1
         ViewThatFits(in: .horizontal) {
-            row(codexCompact: false, claude: usage.claude, compact: false, compactButtons: false)
-            row(codexCompact: true, claude: usage.claude, compact: false, compactButtons: false)
-            row(codexCompact: true, claude: usage.claude, compact: false, compactButtons: true)
-            row(codexCompact: true, claude: usage.claude, compact: true, compactButtons: true)
-            row(codexCompact: true, claude: Array(usage.claude.prefix(2)), compact: true, compactButtons: true)
-            row(codexCompact: true, claude: Array(usage.claude.prefix(1)), compact: true, compactButtons: true)
+            row(codex: codex, named: named, codexCompact: false, claude: usage.claude, compact: false, compactButtons: false)
+            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, compact: false, compactButtons: false)
+            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, compact: false, compactButtons: true)
+            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, compact: true, compactButtons: true)
+            // 계정을 빼기 전에 계정마다 막대를 하나만 (5시간, 없으면 첫 한도)
+            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, compact: true, compactButtons: true, firstOnly: true)
+            row(codex: codex, named: named, codexCompact: true, claude: Array(usage.claude.prefix(2)), compact: true, compactButtons: true, firstOnly: true)
+            row(codex: codex, named: named, codexCompact: true, claude: Array(usage.claude.prefix(1)), compact: true, compactButtons: true, firstOnly: true)
         }
         .agentsFrame(height: Self.height)
     }
 
-    private func row(codexCompact: Bool, claude: [ClaudeUsage], compact: Bool, compactButtons: Bool) -> some View {
+    private func row(codex: [CodexAccountUsage], named: Bool, codexCompact: Bool, claude: [ClaudeUsage], compact: Bool,
+                     compactButtons: Bool, firstOnly: Bool = false) -> some View {
         HStack(spacing: 8) {
-            cards(codexCompact: codexCompact, claude: claude, compact: compact)
+            cards(codex: codex, named: named, codexCompact: codexCompact, claude: claude, compact: compact, firstOnly: firstOnly)
                 // 사용량 카드를 누르면 계정 한눈에 보기
                 .contentShape(Rectangle())
                 .onTapGesture { pane = pane == .accounts ? .session : .accounts }
@@ -32,14 +37,20 @@ struct AgentsUsageStrip: View {
         }
     }
 
-    private func cards(codexCompact: Bool, claude: [ClaudeUsage], compact: Bool) -> some View {
+    /// named: Codex 계정이 여럿이라 카드에 계정 이름을 붙인다
+    private func cards(codex: [CodexAccountUsage], named: Bool, codexCompact: Bool, claude: [ClaudeUsage], compact: Bool,
+                       firstOnly: Bool) -> some View {
         HStack(spacing: 8) {
-            if let codex = usage.codex, codex.primary != nil || codex.secondary != nil {
-                CodexUsageCard(usage: codex, compact: codexCompact)
+            // 계정이 하나면 큰 막대, 여럿이면 Claude처럼 한 카드에 계정마다 한 줄
+            if named {
+                CodexLimitsCard(accounts: codex, firstOnly: firstOnly)
+            } else if let account = codex.first, let limits = account.usage {
+                CodexUsageCard(usage: limits, compact: codexCompact,
+                               name: account.account != ".codex" ? AgentsStyle.accountName(account.account) : nil)
             }
             if !claude.isEmpty {
                 switch display {
-                case .limits: ClaudeLimitsCard(accounts: claude)
+                case .limits: ClaudeLimitsCard(accounts: claude, firstOnly: firstOnly)
                 case .cost: ClaudeUsageCard(accounts: claude, compact: compact)
                 }
             }
@@ -97,10 +108,12 @@ struct AgentsUsageStrip: View {
 private struct CodexUsageCard: View {
     let usage: CodexUsage
     let compact: Bool
+    /// 계정이 여럿이면 계정 이름 ("account2")
+    var name: String?
 
     var body: some View {
         HStack(spacing: 10) {
-            UsageCardTitle(kind: .codex, title: "Codex", detail: usage.plan)
+            UsageCardTitle(kind: .codex, title: "Codex", detail: name ?? usage.plan)
             if compact {
                 HStack(spacing: 8) {
                     ForEach([usage.primary, usage.secondary].compactMap { $0 }, id: \.windowMinutes) { LimitGauge(window: $0) }
@@ -113,7 +126,7 @@ private struct CodexUsageCard: View {
         .padding(.horizontal, 10)
         .frame(maxHeight: .infinity)
         .background(AgentsStyle.cardFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .help("Codex 사용 한도 · \(AgentsStyle.ago(usage.updatedAt)) 기록")
+        .help("Codex\(name.map { " · \($0)" } ?? "") 사용 한도 · \(AgentsStyle.ago(usage.updatedAt)) 기록")
     }
 }
 
@@ -189,41 +202,114 @@ private struct LimitGauge: View {
     }
 }
 
-/// Claude 계정마다 구독의 5시간 · 주간 한도 (계정 하나에 한 줄)
-private struct ClaudeLimitsCard: View {
-    let accounts: [ClaudeUsage]
+/// 에이전트 하나의 계정별 한도: 계정 하나에 한 줄. 두 줄이 넘으면 카드 안에서 아래로 스크롤한다
+private struct AccountLimitsCard: View {
+    struct Row: Identifiable {
+        var id: String
+        /// 계정 이름 (기본 계정 하나뿐이면 nil)
+        var name: String?
+        var windows: [UsageWindow]
+        var emptyHelp: String
+    }
+
+    let kind: AgentKind
+    let title: String
+    let detail: String?
+    let rows: [Row]
+    let help: String
+    /// 계정마다 막대 하나만 (5시간, 없으면 첫 한도). 자리가 모자랄 때
+    var firstOnly = false
+
+    /// 이 줄 수까지는 스크롤 없이 보인다 (사용량 줄 높이에 두 줄이 들어간다)
+    private static let visibleRows = 2
 
     var body: some View {
         HStack(spacing: 10) {
-            UsageCardTitle(kind: .claude, title: "Claude", detail: "구독")
-            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 3) {
-                ForEach(accounts, id: \.account) { account in
-                    GridRow {
-                        if accounts.count > 1 || account.account != ".claude" {
-                            Text(AgentsStyle.accountName(account.account))
-                                .agentsFont(size: 9.5)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .fixedSize()
-                        }
-                        if account.limits.isEmpty {
-                            Text("한도 정보 없음")
-                                .agentsFont(size: 9.5)
-                                .foregroundStyle(.tertiary)
-                                .fixedSize()
-                                .gridCellColumns(2)
-                                .help("설정(톱니)에서 Claude Code를 연결한 뒤 이 계정으로 Claude를 한 번 쓰면 보여요")
-                        } else {
-                            ForEach(account.limits, id: \.windowMinutes) { LimitGauge(window: $0) }
-                        }
-                    }
-                }
+            UsageCardTitle(kind: kind, title: title, detail: detail)
+            if rows.count > Self.visibleRows {
+                ScrollView(.vertical, showsIndicators: false) { grid.padding(.vertical, 4) }
+                    .fixedSize(horizontal: true, vertical: false)
+            } else {
+                grid
             }
         }
         .padding(.horizontal, 10)
         .frame(maxHeight: .infinity)
         .background(AgentsStyle.cardFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .help(help)
+    }
+
+    private var grid: some View {
+        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 3) {
+            ForEach(rows) { row in
+                GridRow {
+                    if let name = row.name {
+                        Text(name)
+                            .agentsFont(size: 9.5)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                    if row.windows.isEmpty {
+                        Text("한도 정보 없음")
+                            .agentsFont(size: 9.5)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize()
+                            .gridCellColumns(2)
+                            .help(row.emptyHelp)
+                    } else {
+                        ForEach(shown(row.windows), id: \.windowMinutes) { LimitGauge(window: $0) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+extension AccountLimitsCard {
+    func shown(_ windows: [UsageWindow]) -> [UsageWindow] {
+        guard firstOnly else { return windows }
+        return [windows.first { $0.windowMinutes == 300 } ?? windows.first].compactMap { $0 }
+    }
+}
+
+/// Codex 계정이 여럿일 때: 계정마다 5시간 · 주간 (무료 요금제는 30일) 한도
+private struct CodexLimitsCard: View {
+    let accounts: [CodexAccountUsage]
+    var firstOnly = false
+
+    var body: some View {
+        AccountLimitsCard(
+            kind: .codex, title: "Codex", detail: "계정 \(accounts.count)개",
+            rows: accounts.map { account in
+                .init(id: account.home, name: AgentsStyle.accountName(account.account),
+                      windows: [account.usage?.primary, account.usage?.secondary].compactMap { $0 },
+                      emptyHelp: "이 계정으로 Codex를 한 번 쓰면 보여요")
+            },
+            help: (["Codex 사용 한도 (기록에서 읽어요)"] + accounts.map { account in
+                let plan = (account.login?.plan ?? account.usage?.plan).map { " · \($0)" } ?? ""
+                let date = account.usage.map { " · \(AgentsStyle.ago($0.updatedAt)) 기록" } ?? ""
+                return "\(AgentsStyle.accountName(account.account))\(plan)\(date)"
+            }).joined(separator: "\n"),
+            firstOnly: firstOnly)
+    }
+}
+
+/// Claude 계정마다 구독의 5시간 · 주간 한도 (계정 하나에 한 줄)
+private struct ClaudeLimitsCard: View {
+    let accounts: [ClaudeUsage]
+    var firstOnly = false
+
+    var body: some View {
+        AccountLimitsCard(
+            kind: .claude, title: "Claude", detail: "구독",
+            rows: accounts.map { account in
+                .init(id: account.account,
+                      name: accounts.count > 1 || account.account != ".claude" ? AgentsStyle.accountName(account.account) : nil,
+                      windows: account.limits,
+                      emptyHelp: "설정(톱니)에서 Claude Code를 연결한 뒤 이 계정으로 Claude를 한 번 쓰면 보여요")
+            },
+            help: help, firstOnly: firstOnly)
     }
 
     private var help: String {

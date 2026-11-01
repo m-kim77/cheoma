@@ -37,11 +37,11 @@ struct AgentsAccountsPane: View {
 
     private enum Item {
         case claude(ClaudeUsage)
-        case codex(AgentAccounts.Codex)
+        case codex(CodexAccountUsage)
     }
 
     private var cardItems: [Item] {
-        store.usage.claude.map(Item.claude) + (store.usage.codexAccount.map { [Item.codex($0)] } ?? [])
+        store.usage.claude.map(Item.claude) + store.usage.codex.map(Item.codex)
     }
 
     @ViewBuilder
@@ -50,9 +50,18 @@ struct AgentsAccountsPane: View {
         case .claude(let account):
             ClaudeAccountCard(account: account, running: store.sessions.filter { $0.account == account.account && $0.state != .exited }.count)
         case .codex(let codex):
-            CodexAccountCard(account: codex, usage: store.usage.codex,
-                             running: store.sessions.filter { $0.kind == .codex && $0.state != .exited }.count)
+            CodexAccountCard(account: codex, isOnly: store.usage.codex.count == 1, running: runningCodex(codex))
         }
+    }
+
+    /// 도는 Codex 세션 중 이 계정 것 (계정이 하나면 전부, 아니면 세션 ID로 기록을 찾아 맞춘다)
+    private func runningCodex(_ account: CodexAccountUsage) -> Int {
+        let running = store.sessions.filter { $0.kind == .codex && $0.state != .exited }
+        guard store.usage.codex.count > 1 else { return running.count }
+        return running.filter { session in
+            let id = session.sessionID ?? session.lastEvent?.sessionID
+            return store.usage.recentSessions.contains { $0.kind == .codex && $0.id == id && $0.account == account.account }
+        }.count
     }
 }
 
@@ -91,13 +100,16 @@ private struct ClaudeAccountCard: View {
 }
 
 private struct CodexAccountCard: View {
-    let account: AgentAccounts.Codex
-    let usage: CodexUsage?
+    let account: CodexAccountUsage
+    let isOnly: Bool
     let running: Int
 
     var body: some View {
-        AccountCard(kind: .codex, title: "Codex", plan: account.plan.map { $0.prefix(1).uppercased() + $0.dropFirst() },
-                    email: account.email ?? (account.mode == "apikey" ? "API 키로 로그인" : "로그인 정보 없음")) {
+        let login = account.login
+        let usage = account.usage
+        AccountCard(kind: .codex, title: isOnly && account.account == ".codex" ? "Codex" : "Codex · \(AgentsStyle.accountName(account.account))",
+                    plan: (login?.plan ?? usage?.plan).map { $0.prefix(1).uppercased() + $0.dropFirst() },
+                    email: login?.email ?? (login?.mode == "apikey" ? "API 키로 로그인" : "로그인 정보 없음")) {
             let windows = [usage?.primary, usage?.secondary].compactMap { $0 }
             if windows.isEmpty {
                 Text("한도 정보 없음 · Codex를 한 번 쓰면 보여요")
@@ -110,7 +122,8 @@ private struct CodexAccountCard: View {
             Text(([running > 0 ? "세션 \(running)개 도는 중" : "도는 세션 없음"]
                   + [usage.map { "한도 \(AgentsStyle.ago($0.updatedAt)) 기록" }].compactMap { $0 }).joined(separator: " · "))
         }
-        .help(account.mode == "chatgpt" ? "ChatGPT 계정으로 로그인 (~/.codex/auth.json)" : "~/.codex/auth.json")
+        .help(["\(login?.mode == "chatgpt" ? "ChatGPT 계정으로 로그인 · " : "")\(AgentsStyle.abbreviated(account.home))/auth.json",
+               "실행: \(AgentResume.launchCommand(.codex, configDir: account.home))"].joined(separator: "\n"))
     }
 }
 
@@ -330,12 +343,22 @@ struct AgentsResumeOptions: View {
         let configDir = record.transcriptPath.map {
             URL(fileURLWithPath: $0).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().path
         }
-        return AgentResume.Target(kind: record.kind, sessionID: record.id, cwd: cwd, configDir: record.kind == .claude ? configDir : nil)
+        // Codex 기록은 <CODEX_HOME>/sessions/YYYY/MM/DD/rollout-*.jsonl
+        let codexHome = record.transcriptPath.map { path in
+            (0..<5).reduce(URL(fileURLWithPath: path)) { url, _ in url.deletingLastPathComponent() }.path
+        }
+        return AgentResume.Target(kind: record.kind, sessionID: record.id, cwd: cwd,
+                                  configDir: record.kind == .claude ? configDir : (record.kind == .codex ? codexHome : nil))
     }
 
     static func target(_ session: AgentSession, store: AgentStore) -> AgentResume.Target? {
         guard AgentResume.canResume(session.kind), let id = session.sessionID ?? session.lastEvent?.sessionID,
               let cwd = session.cwd, !cwd.isEmpty else { return nil }
+        if session.kind == .codex {
+            // Codex 프로세스는 계정을 알려 주지 않는다. 같은 세션의 기록이 있는 폴더로 안다
+            let record = store.usage.recentSessions.first { $0.kind == .codex && $0.id == id }
+            return AgentResume.Target(kind: .codex, sessionID: id, cwd: cwd, configDir: record.flatMap { target($0)?.configDir })
+        }
         let configDir = session.account.flatMap { account in store.usage.claude.first { $0.account == account }?.configDir }
         return AgentResume.Target(kind: session.kind, sessionID: id, cwd: cwd, configDir: configDir)
     }
@@ -367,9 +390,10 @@ struct AgentsResumeOptions: View {
     }
 
     private var options: [Option] {
+        if target.kind == .codex, store.usage.codex.count > 1 { return codexOptions }
         guard target.kind == .claude else {
             return [Option(title: "이어서 하기", symbol: "play.fill", configDir: nil, isCurrent: true,
-                           help: AgentResume.resumeCommand(target, configDir: nil))]
+                           help: AgentResume.resumeCommand(target, configDir: target.configDir))]
         }
         let accounts = store.usage.claude
         let current = currentAccount ?? accounts.first { $0.configDir == target.configDir }?.account
@@ -386,6 +410,28 @@ struct AgentsResumeOptions: View {
                           configDir: account.configDir, isCurrent: isCurrent,
                           help: (isCurrent ? "\(name) 계정으로 이어서 해요" : "대화 기록을 \(name) 계정으로 복사하고 그 계정으로 이어서 해요 (원래 기록은 그대로)")
                               + "\n\(AgentResume.resumeCommand(target, configDir: account.configDir))")
+        }
+        .filter { includesCurrent || !$0.isCurrent }
+        .sorted { $0.isCurrent && !$1.isCurrent }
+    }
+
+    /// Codex 계정마다 (지금 기록이 있는 폴더가 지금 계정. 모르면 기본 ~/.codex)
+    private var codexOptions: [Option] {
+        let accounts = store.usage.codex
+        let currentHome = target.configDir ?? accounts.first { AgentResume.isDefault(codexHome: $0.home) }?.home
+        return accounts.map { account in
+            let isCurrent = account.home == currentHome
+            let windows = [account.usage?.primary, account.usage?.secondary].compactMap { $0 }
+            let percent = (windows.first { $0.windowMinutes == 300 } ?? windows.first).map { window -> String in
+                let reset = window.resetsAt.map { $0 <= Date() } ?? false
+                return " · \(AgentsStyle.windowName(minutes: window.windowMinutes)) \(reset ? 0 : Int(window.usedPercent.rounded()))%"
+            } ?? ""
+            let name = AgentsStyle.accountName(account.account)
+            return Option(title: isCurrent ? "이어서 하기" : "\(name)로 이어서\(percent)",
+                          symbol: isCurrent ? "play.fill" : "arrow.triangle.swap",
+                          configDir: account.home, isCurrent: isCurrent,
+                          help: (isCurrent ? "\(name) 계정으로 이어서 해요" : "대화 기록을 \(name) 계정으로 복사하고 그 계정으로 이어서 해요 (원래 기록은 그대로)")
+                              + "\n\(AgentResume.resumeCommand(target, configDir: account.home))")
         }
         .filter { includesCurrent || !$0.isCurrent }
         .sorted { $0.isCurrent && !$1.isCurrent }

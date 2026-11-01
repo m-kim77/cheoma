@@ -23,11 +23,8 @@ final class AgentUsageReader {
     private var costSamples: [String: (stat: JSONLFile.Stat, sample: CostStateSample?)] = [:]
     private var rates: [String: Double] = [:]
 
-    // Codex
-    private var codexFiles: [String: CodexFile] = [:]
-    private var codexTails: [String: (stat: JSONLFile.Stat, limits: CodexLimits?)] = [:]
-    private var codexTitles: [String: String] = [:]
-    private var codexIndex: (stat: JSONLFile.Stat, offset: Int64)?
+    // Codex (폴더마다)
+    private var codexHomes: [String: CodexHome] = [:]
 
     // 계정 파일 (바뀌었을 때만 다시 읽는다)
     private var accountFiles: [String: (stat: JSONLFile.Stat, claude: AgentAccounts.Claude?, codex: AgentAccounts.Codex?)] = [:]
@@ -59,9 +56,16 @@ final class AgentUsageReader {
             sessions += recentSessions(account, now: now)
         }
 
-        let codexHome = Self.codexHome(home: URL(fileURLWithPath: home), environment: environment).path
-        usage.codex = refreshCodex(codexHome: codexHome, now: now, sessions: &sessions)
-        usage.codexAccount = codexAccount(codexHome: codexHome)
+        let codexDirs = Self.codexHomes(home: URL(fileURLWithPath: home), environment: environment).map(\.path)
+        for dir in codexDirs {
+            let state = codexHomes[dir] ?? CodexHome(dir: dir)
+            codexHomes[dir] = state
+            let limits = refreshCodex(state, now: now, sessions: &sessions)
+            let login = codexAccount(codexHome: dir)
+            guard login != nil || limits != nil else { continue }
+            usage.codex.append(CodexAccountUsage(account: state.name, home: dir, login: login, usage: limits))
+        }
+        codexHomes = codexHomes.filter { codexDirs.contains($0.key) }
 
         // 이어 한 Codex 세션은 기록 파일이 여러 개라 같은 세션이 두 번 나온다. 가장 최근 것만 남긴다
         var seen = Set<String>()
@@ -98,6 +102,30 @@ final class AgentUsageReader {
     static func codexHome(home: URL, environment: [String: String]) -> URL {
         if let custom = environment["CODEX_HOME"], !custom.isEmpty { return URL(fileURLWithPath: (custom as NSString).expandingTildeInPath) }
         return home.appendingPathComponent(".codex")
+    }
+
+    /// Codex 폴더들: ~/.codex, auth.json이나 sessions/가 있는 ~/.codex-* (CODEX_HOME으로 쓰는 계정마다 하나), $CODEX_HOME
+    static func codexHomes(home: URL, environment: [String: String]) -> [URL] {
+        let manager = FileManager.default
+        var result: [URL] = []
+        func add(_ url: URL) {
+            let standardized = url.standardizedFileURL.resolvingSymlinksInPath()
+            var isDirectory: ObjCBool = false
+            guard manager.fileExists(atPath: standardized.path, isDirectory: &isDirectory), isDirectory.boolValue,
+                  !result.contains(where: { $0.path == standardized.path }) else { return }
+            result.append(standardized)
+        }
+        add(home.appendingPathComponent(".codex"))
+        let others = (try? manager.contentsOfDirectory(atPath: home.path)) ?? []
+        for name in others.sorted() where name.hasPrefix(".codex-") {
+            let dir = home.appendingPathComponent(name)
+            if manager.fileExists(atPath: dir.appendingPathComponent("auth.json").path)
+                || manager.fileExists(atPath: dir.appendingPathComponent("sessions").path) { add(dir) }
+        }
+        if let custom = environment["CODEX_HOME"], !custom.isEmpty {
+            add(URL(fileURLWithPath: (custom as NSString).expandingTildeInPath))
+        }
+        return result
     }
 
     // MARK: - Claude
@@ -310,12 +338,12 @@ final class AgentUsageReader {
 
     // MARK: - Codex
 
-    private func refreshCodex(codexHome: String, now: Double, sessions: inout [RecordedSession]) -> CodexUsage? {
-        let rollouts = Self.jsonlFiles(under: codexHome + "/sessions", depth: 4)
+    private func refreshCodex(_ home: CodexHome, now: Double, sessions: inout [RecordedSession]) -> CodexUsage? {
+        let rollouts = Self.jsonlFiles(under: home.dir + "/sessions", depth: 4)
             .filter { ($0 as NSString).lastPathComponent.hasPrefix("rollout-") }
             .compactMap { path in JSONLFile.stat(path).map { (path: path, stat: $0) } }
         guard !rollouts.isEmpty else {
-            codexFiles = [:]
+            home.files = [:]
             return nil
         }
         let recentStart = now - Self.recentWindow
@@ -323,40 +351,40 @@ final class AgentUsageReader {
         for item in rollouts where item.stat.mtime >= recentStart {
             alive.insert(item.path)
             let file: CodexFile
-            if let existing = codexFiles[item.path] {
+            if let existing = home.files[item.path] {
                 if existing.stat == item.stat { continue }
                 if existing.stat.inode != item.stat.inode || item.stat.size < existing.offset {
                     file = CodexFile(stat: item.stat)
-                    codexFiles[item.path] = file
+                    home.files[item.path] = file
                 } else {
                     file = existing
                     file.stat = item.stat
                 }
             } else {
                 file = CodexFile(stat: item.stat)
-                codexFiles[item.path] = file
+                home.files[item.path] = file
             }
             file.offset = JSONLFile.readLines(path: item.path, from: file.offset, to: item.stat.size, buffer: &buffer) { line in
                 parseCodexLine(line, file: file)
             }
         }
-        codexFiles = codexFiles.filter { alive.contains($0.key) }
-        refreshCodexTitles(codexHome: codexHome)
+        home.files = home.files.filter { alive.contains($0.key) }
+        refreshCodexTitles(home)
 
-        for (path, file) in codexFiles {
+        for (path, file) in home.files {
             guard let stat = rollouts.first(where: { $0.path == path })?.stat, stat.mtime >= recentStart else { continue }
             let id = file.sessionID ?? ((path as NSString).lastPathComponent as NSString).deletingPathExtension
-            sessions.append(RecordedSession(id: id, kind: .codex, cwd: file.cwd, title: file.sessionID.flatMap { codexTitles[$0] },
+            sessions.append(RecordedSession(id: id, kind: .codex, cwd: file.cwd, title: file.sessionID.flatMap { home.titles[$0] },
                                             lastActivity: Date(timeIntervalSince1970: stat.mtime), costUSD: nil,
-                                            lastMessage: file.lastMessage, isTurnComplete: file.isTurnComplete, transcriptPath: path))
+                                            lastMessage: file.lastMessage, isTurnComplete: file.isTurnComplete, account: home.name, transcriptPath: path))
         }
 
         // 한도는 가장 최근 기록에서. 마지막 세션이 오류로 끝나면 rate_limits가 없어서 그 앞 파일들까지 끝부분을 본다
-        var best = codexFiles.values.compactMap(\.limits).max { $0.time < $1.time }
+        var best = home.files.values.compactMap(\.limits).max { $0.time < $1.time }
         let newest = rollouts.sorted { $0.stat.mtime > $1.stat.mtime }.prefix(6)
         for item in newest {
             let limits: CodexLimits?
-            if let cached = codexTails[item.path], cached.stat == item.stat {
+            if let cached = home.tails[item.path], cached.stat == item.stat {
                 limits = cached.limits
             } else {
                 let file = CodexFile(stat: item.stat)
@@ -364,27 +392,27 @@ final class AgentUsageReader {
                     parseCodexLine(line, file: file)
                 }
                 limits = file.limits
-                codexTails[item.path] = (item.stat, limits)
+                home.tails[item.path] = (item.stat, limits)
             }
             if let limits, limits.time > (best?.time ?? 0) { best = limits }
         }
         let newestPaths = Set(newest.map(\.path))
-        codexTails = codexTails.filter { newestPaths.contains($0.key) }
+        home.tails = home.tails.filter { newestPaths.contains($0.key) }
         return best?.usage
     }
 
     /// session_index.jsonl: 세션 ID → 제목 (뒤에 적힌 것이 최신)
-    private func refreshCodexTitles(codexHome: String) {
-        let path = codexHome + "/session_index.jsonl"
+    private func refreshCodexTitles(_ home: CodexHome) {
+        let path = home.dir + "/session_index.jsonl"
         guard let stat = JSONLFile.stat(path) else { return }
         var offset: Int64 = 0
-        if let index = codexIndex {
+        if let index = home.index {
             if index.stat == stat { return }
-            if index.stat.inode == stat.inode, stat.size >= index.offset { offset = index.offset } else { codexTitles = [:] }
+            if index.stat.inode == stat.inode, stat.size >= index.offset { offset = index.offset } else { home.titles = [:] }
         }
         offset = JSONLFile.readLines(path: path, from: offset, to: stat.size, buffer: &buffer) { line in
-            if let (id, name) = parseCodexIndexLine(line) { codexTitles[id] = name }
+            if let (id, name) = parseCodexIndexLine(line) { home.titles[id] = name }
         }
-        codexIndex = (stat, offset)
+        home.index = (stat, offset)
     }
 }

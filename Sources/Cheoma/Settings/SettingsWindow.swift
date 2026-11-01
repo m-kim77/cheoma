@@ -304,15 +304,23 @@ private struct AccountSettings: View {
                     Text("Claude Code · \(AgentsStyle.accountName(account.account))")
                 }
             }
-            if let codex = agents.usage.codexAccount {
-                Section("Codex") {
-                    LabeledContent("로그인", value: codex.mode == "chatgpt" ? "ChatGPT 계정" : (codex.mode == "apikey" ? "API 키" : "-"))
-                    LabeledContent("이메일", value: codex.email ?? "-")
-                    LabeledContent("요금제", value: codex.plan.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? "-")
-                    limits([agents.usage.codex?.primary, agents.usage.codex?.secondary].compactMap { $0 }, updatedAt: agents.usage.codex?.updatedAt)
+            ForEach(agents.usage.codex, id: \.home) { codex in
+                Section {
+                    LabeledContent("로그인", value: codex.login?.mode == "chatgpt" ? "ChatGPT 계정" : (codex.login?.mode == "apikey" ? "API 키" : "-"))
+                    LabeledContent("이메일", value: codex.login?.email ?? "-")
+                    LabeledContent("요금제", value: (codex.login?.plan ?? codex.usage?.plan).map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? "-")
+                    limits([codex.usage?.primary, codex.usage?.secondary].compactMap { $0 }, updatedAt: codex.usage?.updatedAt)
+                    LabeledContent("폴더", value: AgentsStyle.abbreviated(codex.home))
+                    LabeledContent("실행 명령") {
+                        Text(AgentResume.launchCommand(.codex, configDir: codex.home))
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                    }
+                } header: {
+                    Text("Codex · \(AgentsStyle.accountName(codex.account))")
                 }
             }
-            if agents.usage.claude.isEmpty && agents.usage.codexAccount == nil {
+            if agents.usage.claude.isEmpty && agents.usage.codex.isEmpty {
                 Text("로그인된 에이전트 계정을 찾지 못했어요").foregroundStyle(.secondary)
             }
         }

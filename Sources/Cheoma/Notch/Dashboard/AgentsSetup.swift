@@ -218,6 +218,8 @@ struct AgentsLauncherPane: View {
     @State private var pickedFolder: String?
     /// Claude를 띄울 계정 (설정 폴더). 고르지 않으면 한도가 가장 넉넉한 계정
     @State private var configDir: String?
+    /// Codex를 띄울 계정 (CODEX_HOME 폴더). 고르지 않으면 5시간 한도가 가장 넉넉한 계정
+    @State private var codexHome: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -263,6 +265,16 @@ struct AgentsLauncherPane: View {
                 }
             }
 
+            if selectedKind == .codex, store.usage.codex.count > 1 {
+                section("계정") {
+                    HStack(spacing: 5) {
+                        ForEach(store.usage.codex, id: \.home) { account in
+                            codexAccountButton(account)
+                        }
+                    }
+                }
+            }
+
             section("폴더") {
                 ViewThatFits(in: .vertical) {
                     folderList
@@ -277,7 +289,7 @@ struct AgentsLauncherPane: View {
                         .agentsFont(size: 10)
                         .foregroundStyle(.orange)
                 } else if let kind = selectedKind, let folder = selectedFolder {
-                    Text("\(AgentResume.launchCommand(kind, configDir: kind == .claude ? selectedConfigDir : nil)) · \(AgentsStyle.abbreviated(folder))")
+                    Text("\(AgentResume.launchCommand(kind, configDir: selectedDir(for: kind))) · \(AgentsStyle.abbreviated(folder))")
                         .agentsFont(size: 10, design: .monospaced)
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
@@ -286,7 +298,7 @@ struct AgentsLauncherPane: View {
                 Spacer(minLength: 0)
                 AgentsCapsuleButton(title: "실행", symbol: "play.fill", prominent: canLaunch) {
                     guard canLaunch, let kind = selectedKind, let folder = selectedFolder else { return }
-                    store.launch(kind, in: folder, configDir: kind == .claude ? selectedConfigDir : nil)
+                    store.launch(kind, in: folder, configDir: selectedDir(for: kind))
                     pane = .session
                 }
                 .disabled(!canLaunch)
@@ -304,6 +316,45 @@ struct AgentsLauncherPane: View {
     private var selectedConfigDir: String? {
         if let configDir { return configDir }
         return store.usage.claude.min { Self.fiveHourPercent($0) < Self.fiveHourPercent($1) }?.configDir
+    }
+
+    private func selectedDir(for kind: AgentKind) -> String? {
+        switch kind {
+        case .claude: selectedConfigDir
+        case .codex: selectedCodexHome
+        default: nil
+        }
+    }
+
+    private var selectedCodexHome: String? {
+        if let codexHome { return codexHome }
+        return store.usage.codex.min { Self.fiveHourPercent($0) < Self.fiveHourPercent($1) }?.home
+    }
+
+    private static func fiveHourPercent(_ account: CodexAccountUsage) -> Double {
+        guard let window = [account.usage?.primary, account.usage?.secondary].compactMap({ $0 }).first(where: { $0.windowMinutes == 300 })
+        else { return 100 }
+        return (window.resetsAt.map { $0 <= Date() } ?? false) ? 0 : window.usedPercent
+    }
+
+    private func codexAccountButton(_ account: CodexAccountUsage) -> some View {
+        let isSelected = account.home == selectedCodexHome
+        let hasLimit = account.usage?.primary != nil || account.usage?.secondary != nil
+        let percent = hasLimit ? " \(Int(Self.fiveHourPercent(account).rounded()))%" : ""
+        return Button { codexHome = account.home } label: {
+            Text(AgentsStyle.accountName(account.account) + percent)
+                .agentsFont(size: 10.5, weight: .semibold)
+                .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.horizontal, 9)
+                .agentsFrame(height: 24)
+                .background(.white.opacity(isSelected ? 0.2 : 0.07), in: Capsule())
+                .overlay(Capsule().strokeBorder(.white.opacity(isSelected ? 0.35 : 0), lineWidth: 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help([account.login?.email, account.login?.plan].compactMap { $0 }.joined(separator: " · "))
     }
 
     private static func fiveHourPercent(_ account: ClaudeUsage) -> Double {

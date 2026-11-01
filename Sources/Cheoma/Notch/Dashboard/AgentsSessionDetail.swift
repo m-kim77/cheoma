@@ -62,9 +62,9 @@ struct AgentsSessionDetail: View {
             }
             Spacer(minLength: 6)
             // 한도가 찬 계정의 대화를 다른 계정으로 옮겨 이어서 하기 (끝난 세션은 이어서 하기 단추가 늘 보인다)
-            if resumeTarget != nil, session.kind == .claude, session.state != .exited, store.usage.claude.count > 1 {
+            if resumeTarget != nil, session.state != .exited, hasOtherAccounts {
                 AgentsCapsuleButton(title: "다른 계정으로", symbol: "arrow.triangle.swap") { showsResume.toggle() }
-                    .help("이 대화를 다른 Claude 계정으로 이어서 해요")
+                    .help("이 대화를 다른 \(session.kind.displayName) 계정으로 이어서 해요")
             }
             if session.location.canReply {
                 AgentsCapsuleButton(title: "터미널로 가기", symbol: "arrow.up.forward.app") {
@@ -78,6 +78,14 @@ struct AgentsSessionDetail: View {
                 }
                 .help("Cheoma가 띄운 tmux 세션을 끝내요")
             }
+        }
+    }
+
+    private var hasOtherAccounts: Bool {
+        switch session.kind {
+        case .claude: store.usage.claude.count > 1
+        case .codex: store.usage.codex.count > 1
+        default: false
         }
     }
 

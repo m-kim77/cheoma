@@ -357,7 +357,11 @@ final class AgentResumeTests: XCTestCase {
         XCTAssertEqual(AgentResume.resumeCommand(target, configDir: "/Users/me/.claude", home: home), "claude --resume 'abc'")
         XCTAssertEqual(AgentResume.resumeCommand(target, configDir: "/Users/me/.claude-work", home: home),
                        "CLAUDE_CONFIG_DIR='/Users/me/.claude-work' claude --resume 'abc'")
-        XCTAssertEqual(AgentResume.launchCommand(.codex, configDir: "/Users/me/.claude-work", home: home), "codex")
+        XCTAssertEqual(AgentResume.launchCommand(.codex, configDir: nil, home: home), "codex")
+        XCTAssertEqual(AgentResume.launchCommand(.codex, configDir: "/Users/me/.codex", home: home), "codex")
+        XCTAssertEqual(AgentResume.launchCommand(.codex, configDir: "/Users/me/.codex-work", home: home), "CODEX_HOME='/Users/me/.codex-work' codex")
+        let codexWork = AgentResume.Target(kind: .codex, sessionID: "019b", cwd: "/tmp", configDir: "/Users/me/.codex-work")
+        XCTAssertEqual(AgentResume.resumeCommand(codexWork, configDir: nil, home: home), "CODEX_HOME='/Users/me/.codex-work' codex resume '019b'")
         let codex = AgentResume.Target(kind: .codex, sessionID: "019a", cwd: "/tmp", configDir: nil)
         XCTAssertEqual(AgentResume.resumeCommand(codex, configDir: nil, home: home), "codex resume '019a'")
     }
@@ -394,6 +398,26 @@ final class AgentResumeTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: sourceFolder.appendingPathComponent("s1.jsonl"), encoding: .utf8), "newer\n")
 
         let missing = AgentResume.Target(kind: .claude, sessionID: "nope", cwd: "/tmp", configDir: a.path)
+        XCTAssertThrowsError(try AgentResume.prepare(missing, for: b.path, among: [a.path, b.path]))
+    }
+
+    func testPrepareCopiesCodexRolloutToOtherAccount() throws {
+        let manager = FileManager.default
+        let root = manager.temporaryDirectory.appendingPathComponent("cheoma-codex-resume-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: root) }
+        let a = root.appendingPathComponent(".codex"), b = root.appendingPathComponent(".codex-work")
+        let name = "2026/11/02/rollout-2026-11-02T00-52-50-01a1.jsonl"
+        let source = a.appendingPathComponent("sessions/\(name)")
+        try manager.createDirectory(at: source.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("chat\n".utf8).write(to: source)
+
+        let target = AgentResume.Target(kind: .codex, sessionID: "01a1", cwd: "/Users/me/app", configDir: a.path)
+        XCTAssertEqual(AgentResume.codexRollouts(sessionID: "01a1", codexHome: a.path).count, 1)
+        try AgentResume.prepare(target, for: b.path, among: [a.path, b.path])
+        XCTAssertEqual(try String(contentsOf: b.appendingPathComponent("sessions/\(name)"), encoding: .utf8), "chat\n")
+        XCTAssertEqual(try String(contentsOf: source, encoding: .utf8), "chat\n")
+
+        let missing = AgentResume.Target(kind: .codex, sessionID: "nope", cwd: "/tmp", configDir: a.path)
         XCTAssertThrowsError(try AgentResume.prepare(missing, for: b.path, among: [a.path, b.path]))
     }
 }

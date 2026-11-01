@@ -14,18 +14,22 @@ enum UsageDump {
         print(String(format: "읽는 데 처음 %.1fms, 다음 %.1fms", first, second))
 
         print("\nCodex")
-        if let account = usage.codexAccount {
-            print("  로그인 \(account.mode ?? "-") · \(account.email ?? "-") · \(account.plan ?? "-")")
-        }
-        if let codex = usage.codex {
-            print("  요금제 \(codex.plan ?? "?") · \(ago(codex.updatedAt)) 기록")
+        if usage.codex.isEmpty { print("  기록 없음") }
+        for item in usage.codex {
+            print("  \(item.account)  \(item.home)")
+            if let account = item.login {
+                print("    로그인 \(account.mode ?? "-") · \(account.email ?? "-") · \(account.plan ?? "-")")
+            }
+            guard let codex = item.usage else {
+                print("    한도 기록 없음")
+                continue
+            }
+            print("    요금제 \(codex.plan ?? "?") · \(ago(codex.updatedAt)) 기록")
             for (name, window) in [("primary", codex.primary), ("secondary", codex.secondary)] {
                 guard let window else { continue }
                 let reset = window.resetsAt.map { " · \(date($0)) 초기화" } ?? ""
-                print(String(format: "  %@ %d분 구간 %.0f%%", name, window.windowMinutes, window.usedPercent) + reset)
+                print(String(format: "    %@ %d분 구간 %.0f%%", name, window.windowMinutes, window.usedPercent) + reset)
             }
-        } else {
-            print("  기록 없음")
         }
 
         print("\nClaude Code")

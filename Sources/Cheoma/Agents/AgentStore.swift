@@ -196,7 +196,7 @@ final class AgentStore: ObservableObject {
     /// 끝난 세션(또는 다른 계정으로 옮길 세션)을 새 tmux 세션에서 이어서 한다.
     /// 다른 Claude 계정으로 이으면 대화 기록을 그 계정으로 복사해 두고 그 계정으로 띄운다
     func resume(_ target: AgentResume.Target, configDir: String?) {
-        let dirs = hookStatus.claude.map(\.configDir.path)
+        let dirs = target.kind == .codex ? usage.codex.map(\.home) : hookStatus.claude.map(\.configDir.path)
         let command = AgentResume.resumeCommand(target, configDir: configDir)
         start(target.kind, command: command, in: target.cwd) {
             if let configDir { try AgentResume.prepare(target, for: configDir, among: dirs) }
@@ -889,9 +889,10 @@ extension AgentStore {
                             lastActivity: now.addingTimeInterval(-1_800), costUSD: nil, lastMessage: "Added pagination to /items", isTurnComplete: true),
         ]
         store.usage = AgentUsage(
-            codex: CodexUsage(primary: UsageWindow(usedPercent: 4, windowMinutes: 300, resetsAt: now.addingTimeInterval(3 * 3_600)),
+            codex: [CodexAccountUsage(account: ".codex", home: "/Users/me/.codex",
+                                      login: AgentAccounts.Codex(mode: "chatgpt", email: "me@example.com", plan: "plus"), usage: CodexUsage(primary: UsageWindow(usedPercent: 4, windowMinutes: 300, resetsAt: now.addingTimeInterval(3 * 3_600)),
                               secondary: UsageWindow(usedPercent: 14, windowMinutes: 10_080, resetsAt: now.addingTimeInterval(5 * 86_400)),
-                              plan: "plus", updatedAt: now.addingTimeInterval(-600)),
+                              plan: "plus", updatedAt: now.addingTimeInterval(-600)))],
             claude: [
                 ClaudeUsage(account: ".claude", todayCostUSD: 3.2, todayTokens: 1_240_000, blockCostUSD: 1.1,
                             blockStartedAt: now.addingTimeInterval(-2 * 3_600), blockEndsAt: now.addingTimeInterval(3 * 3_600),
@@ -904,8 +905,7 @@ extension AgentStore {
                                      UsageWindow(usedPercent: 35, windowMinutes: 10_080, resetsAt: now.addingTimeInterval(5 * 86_400))],
                             updatedAt: now, limitsUpdatedAt: now, configDir: "/Users/me/.claude-account2", email: "me@work.example", plan: "Max 5x"),
             ],
-            recentSessions: store.recordedSessions,
-            codexAccount: AgentAccounts.Codex(mode: "chatgpt", email: "me@example.com", plan: "plus"))
+            recentSessions: store.recordedSessions)
         store.hookStatus = HookInstaller.Status(
             claude: [HookInstaller.ClaudeTarget(configDir: URL(fileURLWithPath: "/Users/me/.claude"), hooks: true, statusLine: .installed),
                      HookInstaller.ClaudeTarget(configDir: URL(fileURLWithPath: "/Users/me/.claude-account2"), hooks: false, statusLine: .notInstalled)],

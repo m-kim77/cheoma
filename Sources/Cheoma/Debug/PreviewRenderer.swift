@@ -87,6 +87,11 @@ enum PreviewRenderer {
             AgentReplyField.drawsPlaceholderOnly = true
             model.previewOpen(.agents)
             render(NotchView(model: model, stats: stats, fans: fans, agents: live), to: folder.appendingPathComponent("agents-live.png"))
+            AgentsTab.previewPane = .accounts
+            render(NotchView(model: model, stats: stats, fans: fans, agents: live), to: folder.appendingPathComponent("agents-live-accounts.png"))
+            AgentsTab.previewPane = .launcher
+            render(NotchView(model: model, stats: stats, fans: fans, agents: live), to: folder.appendingPathComponent("agents-live-launcher.png"))
+            AgentsTab.previewPane = nil
             AgentReplyField.drawsPlaceholderOnly = false
         }
     }

@@ -9,6 +9,20 @@ extension AgentUsageReader {
         var usage: CodexUsage
     }
 
+    /// Codex 폴더 하나(계정 하나)에서 읽어 둔 것
+    final class CodexHome {
+        let dir: String
+        var files: [String: CodexFile] = [:]
+        var tails: [String: (stat: JSONLFile.Stat, limits: CodexLimits?)] = [:]
+        var titles: [String: String] = [:]
+        var index: (stat: JSONLFile.Stat, offset: Int64)?
+
+        /// 폴더 이름 (".codex", ".codex-account2" …)
+        var name: String { URL(fileURLWithPath: dir).lastPathComponent }
+
+        init(dir: String) { self.dir = dir }
+    }
+
     final class CodexFile {
         var stat: JSONLFile.Stat
         var offset: Int64 = 0

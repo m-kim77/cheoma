@@ -240,12 +240,23 @@ struct RecordedSession: Identifiable, Equatable, Sendable {
 
 /// 사용량과 최근 세션 (AgentUsageReader)
 struct AgentUsage: Equatable, Sendable {
-    var codex: CodexUsage?
+    /// Codex 계정마다 하나 (~/.codex, CODEX_HOME으로 쓰는 ~/.codex-* …)
+    var codex: [CodexAccountUsage] = []
     var claude: [ClaudeUsage] = []
     /// 최근 24시간 세션, 최근 것부터
     var recentSessions: [RecordedSession] = []
-    /// Codex 로그인 (~/.codex/auth.json)
-    var codexAccount: AgentAccounts.Codex?
+}
+
+/// Codex 계정 하나 (CODEX_HOME 폴더 하나 = 계정 하나)
+struct CodexAccountUsage: Equatable, Sendable {
+    /// 폴더 이름 (".codex", ".codex-account2" …)
+    var account: String
+    /// 폴더 전체 경로 (이 계정으로 실행할 때 CODEX_HOME)
+    var home: String
+    /// 로그인 (<폴더>/auth.json)
+    var login: AgentAccounts.Codex?
+    /// 5시간 · 주간 한도 (기록에서)
+    var usage: CodexUsage?
 }
 
 /// 에이전트 훅이 보낸 이벤트 (Claude Code 훅, Codex notify)

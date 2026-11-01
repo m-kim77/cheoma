@@ -95,8 +95,9 @@ enum AgentsStyle {
 
     /// 설정 폴더 이름을 짧게: ".claude" → "기본", ".claude-account2" → "account2"
     static func accountName(_ folder: String) -> String {
-        if folder == ".claude" { return "기본" }
+        if folder == ".claude" || folder == ".codex" { return "기본" }
         if folder.hasPrefix(".claude-") { return String(folder.dropFirst(".claude-".count)) }
+        if folder.hasPrefix(".codex-") { return String(folder.dropFirst(".codex-".count)) }
         return folder.hasPrefix(".") ? String(folder.dropFirst()) : folder
     }
 
