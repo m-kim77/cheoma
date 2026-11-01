@@ -524,8 +524,8 @@ final class AgentStore: ObservableObject {
         if isVisible && selectedSession?.id == session.id { return }
         if hiddenKinds.contains(session.kind) { return }
         let alert = state == .needsChoice
-            ? NotchAlert(symbol: "hand.raised.fill", tint: .orange, text: "\(Self.shortName(session.kind)) 확인 필요")
-            : NotchAlert(symbol: "checkmark.circle.fill", tint: .green, text: "\(Self.shortName(session.kind)) 끝났어요")
+            ? NotchAlert(symbol: "hand.raised.fill", tint: .orange, text: "\(session.kind.shortName) 확인 필요")
+            : NotchAlert(symbol: "checkmark.circle.fill", tint: .green, text: "\(session.kind.shortName) 끝났어요")
         if let last = lastAlert[session.id], last.state == state, date.timeIntervalSince(last.date) < Self.alertCooldown { return }
         lastAlert[session.id] = (state, date)
         onAlert?(alert, session.id)
@@ -668,19 +668,6 @@ final class AgentStore: ObservableObject {
         if (a.state == .exited) != (b.state == .exited) { return b.state == .exited }
         if a.lastActivity != b.lastActivity { return a.lastActivity > b.lastActivity }
         return a.id < b.id
-    }
-
-    private static func shortName(_ kind: AgentKind) -> String {
-        switch kind {
-        case .claude: "Claude"
-        case .codex: "Codex"
-        case .opencode: "OpenCode"
-        case .pi: "pi"
-        case .hermes: "Hermes"
-        case .antigravity: "Antigravity"
-        case .gemini: "Gemini"
-        case .aider: "Aider"
-        }
     }
 
     nonisolated private static func bridge(for location: TerminalLocation) -> TerminalBridge? {

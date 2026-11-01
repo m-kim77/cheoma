@@ -222,7 +222,7 @@ private struct AgentSettings: View {
                             Text(kind.displayName)
                             if !agents.installedAgents.contains(kind) { Text("설치 안 됨") }
                         } icon: {
-                            Image(systemName: AgentsStyle.symbol(kind)).foregroundStyle(AgentsStyle.color(kind))
+                            AgentMark(kind: kind, size: 18)
                         }
                     }
                 }

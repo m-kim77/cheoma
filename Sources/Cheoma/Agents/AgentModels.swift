@@ -21,6 +21,15 @@ enum AgentKind: String, CaseIterable, Codable, Sendable {
     }
 
     /// 새로 띄울 때 사용자 로그인 셸에서 실행하는 명령
+    /// 짧은 이름 (자리가 모자랄 때)
+    var shortName: String {
+        switch self {
+        case .claude: "Claude"
+        case .gemini: "Gemini"
+        default: displayName
+        }
+    }
+
     /// 실행 명령 (Antigravity CLI는 agy)
     var command: String { self == .antigravity ? "agy" : rawValue }
 }

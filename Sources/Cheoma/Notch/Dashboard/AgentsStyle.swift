@@ -2,6 +2,19 @@ import SwiftUI
 
 /// 에이전트 탭이 같이 쓰는 모양: 에이전트 표시, 상태 색, 시간 · 금액 글자
 enum AgentsStyle {
+    static func glyph(_ kind: AgentKind) -> AgentGlyph {
+        switch kind {
+        case .claude: .text("✻")
+        case .codex: .text(">_")
+        case .opencode: .symbol("square")
+        case .pi: .text("π")
+        case .hermes: .text("☤")
+        case .antigravity: .arch
+        case .gemini: .text("✦")
+        case .aider: .symbol(symbol(kind))
+        }
+    }
+
     static func symbol(_ kind: AgentKind) -> String {
         switch kind {
         case .claude: "asterisk"
@@ -133,19 +146,32 @@ enum AgentsStyle {
 }
 
 /// 에이전트 종류 표시 (작은 둥근 네모 안의 기호)
+/// 에이전트 표시. 그 에이전트가 터미널 화면에서 스스로 쓰는 기호를 쓴다 (상표 로고 대신):
+/// Claude Code "✻", Codex ">_", OpenCode 블록 글자 "o", pi "π", Hermes "☤", Antigravity 아치, Gemini CLI "✦"
+enum AgentGlyph: Equatable {
+    case text(String)
+    case symbol(String)
+    /// Antigravity CLI 시작 화면의 아치 모양
+    case arch
+}
+
 struct AgentMark: View {
-    let symbol: String
+    let glyph: AgentGlyph
     let color: Color
     let label: String
     var size: CGFloat = 22
     @Environment(\.agentsScale) private var scale
 
     init(kind: AgentKind, size: CGFloat = 22) {
-        self.init(symbol: AgentsStyle.symbol(kind), color: AgentsStyle.color(kind), label: kind.displayName, size: size)
+        self.init(glyph: AgentsStyle.glyph(kind), color: AgentsStyle.color(kind), label: kind.displayName, size: size)
     }
 
     init(symbol: String, color: Color, label: String, size: CGFloat = 22) {
-        self.symbol = symbol
+        self.init(glyph: .symbol(symbol), color: color, label: label, size: size)
+    }
+
+    init(glyph: AgentGlyph, color: Color, label: String, size: CGFloat = 22) {
+        self.glyph = glyph
         self.color = color
         self.label = label
         self.size = size
@@ -153,12 +179,48 @@ struct AgentMark: View {
 
     var body: some View {
         let size = size * scale
-        Image(systemName: symbol)
-            .font(.system(size: size * 0.48, weight: .bold))
+        mark(size: size)
             .foregroundStyle(color)
             .frame(width: size, height: size)
             .background(color.opacity(0.17), in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
+            .accessibilityElement()
             .accessibilityLabel(label)
+    }
+
+    @ViewBuilder
+    private func mark(size: CGFloat) -> some View {
+        switch glyph {
+        case .symbol(let name):
+            Image(systemName: name).font(.system(size: size * 0.48, weight: .bold))
+        case .text(let text):
+            // 기호마다 글꼴 안 크기가 달라서 따로 맞춘다 (✻ ☤ ✦는 작게 그려지는 글자)
+            let scale: CGFloat = switch text {
+            case ">_": 0.46
+            case "✻": 0.82
+            case "☤": 0.78
+            case "✦": 0.7
+            default: 0.62
+            }
+            Text(text)
+                .font(.system(size: size * scale, weight: .bold, design: text == ">_" ? .monospaced : .default))
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+        case .arch:
+            AgentArch()
+                .stroke(style: StrokeStyle(lineWidth: size * 0.1, lineCap: .round, lineJoin: .round))
+                .frame(width: size * 0.5, height: size * 0.46)
+        }
+    }
+}
+
+/// Antigravity 아치: 위가 뾰족하고 아래로 벌어지는 산 모양
+struct AgentArch: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addQuadCurve(to: CGPoint(x: rect.midX, y: rect.minY), control: CGPoint(x: rect.minX + rect.width * 0.18, y: rect.minY + rect.height * 0.1))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.maxY), control: CGPoint(x: rect.maxX - rect.width * 0.18, y: rect.minY + rect.height * 0.1))
+        return path
     }
 }
 
