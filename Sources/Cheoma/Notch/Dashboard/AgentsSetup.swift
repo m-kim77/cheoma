@@ -242,13 +242,13 @@ struct AgentsLauncherPane: View {
             }
 
             section("에이전트") {
-                if store.installedAgents.isEmpty {
+                if store.launchableAgents.isEmpty {
                     Text("설치된 에이전트를 찾지 못했어요")
                         .agentsFont(size: 10.5)
                         .foregroundStyle(.secondary)
                 } else {
                     HStack(spacing: 5) {
-                        ForEach(store.installedAgents, id: \.self) { item in
+                        ForEach(store.launchableAgents, id: \.self) { item in
                             agentButton(item)
                         }
                     }
@@ -310,7 +310,10 @@ struct AgentsLauncherPane: View {
         .background(AgentsStyle.cardFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private var selectedKind: AgentKind? { kind ?? store.installedAgents.first }
+    private var selectedKind: AgentKind? {
+        if let kind, store.launchableAgents.contains(kind) { return kind }
+        return store.launchableAgents.first
+    }
 
     /// 고른 계정, 아니면 5시간 한도를 가장 적게 쓴 계정
     private var selectedConfigDir: String? {

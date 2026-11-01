@@ -49,8 +49,35 @@ final class AgentStore: ObservableObject {
     /// 보내기 실패 같은 알림. 화면에 잠깐 보여준다
     @Published private(set) var message: String?
     @Published private(set) var isTmuxAvailable = false
-    /// 설치된 에이전트 (새로 실행할 때 고르는 목록)
+    /// 설치된 에이전트 (설정에서 숨긴 것도 포함)
     @Published private(set) var installedAgents: [AgentKind] = []
+    /// 설정에서 숨긴 에이전트: 세션 목록 · 기록 · 새 에이전트 · 사용량 · 알림에서 뺀다
+    @Published private(set) var hiddenKinds: Set<AgentKind> = AgentStore.loadHiddenKinds()
+    static let hiddenKindsKey = "agents.hiddenKinds"
+
+    /// 새 에이전트로 고를 수 있는 것 (설치됐고 숨기지 않은 것)
+    var launchableAgents: [AgentKind] { installedAgents.filter { !hiddenKinds.contains($0) } }
+
+    /// 숨긴 에이전트의 사용량을 뺀 것 (노치에 보여줄 것)
+    var visibleUsage: AgentUsage {
+        var result = usage
+        if hiddenKinds.contains(.claude) { result.claude = [] }
+        if hiddenKinds.contains(.codex) { result.codex = [] }
+        return result
+    }
+
+    func setHidden(_ kind: AgentKind, _ hidden: Bool) {
+        if hidden { hiddenKinds.insert(kind) } else { hiddenKinds.remove(kind) }
+        UserDefaults.standard.set(hiddenKinds.map(\.rawValue).sorted(), forKey: Self.hiddenKindsKey)
+        sessions.removeAll { hiddenKinds.contains($0.kind) }
+        recordedSessions.removeAll { hiddenKinds.contains($0.kind) }
+        refreshNow()
+    }
+
+    private static func loadHiddenKinds() -> Set<AgentKind> {
+        let names = UserDefaults.standard.stringArray(forKey: hiddenKindsKey) ?? []
+        return Set(names.compactMap(AgentKind.init(rawValue:)))
+    }
     /// 새 에이전트를 띄울 때 고르는 최근 작업 폴더 (최근 것부터)
     @Published private(set) var recentFolders: [String] = []
 
@@ -398,9 +425,9 @@ final class AgentStore: ObservableObject {
             next[index].title = record?.title
         }
 
-        sessions = next.sorted(by: Self.order)
+        sessions = next.filter { !hiddenKinds.contains($0.kind) }.sorted(by: Self.order)
         recordedSessions = usage.recentSessions.filter { record in
-            !sessions.contains { session in
+            !hiddenKinds.contains(record.kind) && !sessions.contains { session in
                 session.sessionID == record.id || (session.kind == record.kind && session.cwd == record.cwd && session.state != .exited)
             }
         }
@@ -493,8 +520,9 @@ final class AgentStore: ObservableObject {
     }
 
     private func alert(_ state: AgentState, for session: AgentSession, at date: Date) {
-        // 보고 있는 세션은 알리지 않는다
+        // 보고 있는 세션, 숨긴 에이전트는 알리지 않는다
         if isVisible && selectedSession?.id == session.id { return }
+        if hiddenKinds.contains(session.kind) { return }
         let alert = state == .needsChoice
             ? NotchAlert(symbol: "hand.raised.fill", tint: .orange, text: "\(Self.shortName(session.kind)) 확인 필요")
             : NotchAlert(symbol: "checkmark.circle.fill", tint: .green, text: "\(Self.shortName(session.kind)) 끝났어요")

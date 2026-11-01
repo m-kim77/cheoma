@@ -38,7 +38,7 @@ struct AgentsTab: View {
         let sessions = store.sessions
         let selected = store.selectedSession
         VStack(spacing: 8) {
-            AgentsUsageStrip(usage: store.usage, pane: $pane)
+            AgentsUsageStrip(usage: store.visibleUsage, pane: $pane)
             HStack(alignment: .top, spacing: 10) {
                 AgentsSessionList(sessions: sessions, recorded: store.recordedSessions,
                                   selectedID: pane.recordID == nil ? selected?.id : nil, selectedRecordID: pane.recordID) { id in

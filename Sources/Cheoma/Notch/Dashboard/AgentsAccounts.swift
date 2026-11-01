@@ -41,7 +41,7 @@ struct AgentsAccountsPane: View {
     }
 
     private var cardItems: [Item] {
-        store.usage.claude.map(Item.claude) + store.usage.codex.map(Item.codex)
+        store.visibleUsage.claude.map(Item.claude) + store.visibleUsage.codex.map(Item.codex)
     }
 
     @ViewBuilder

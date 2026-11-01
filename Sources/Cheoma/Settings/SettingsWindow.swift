@@ -212,6 +212,27 @@ private struct AgentSettings: View {
     var body: some View {
         Form {
             Section {
+                if agents.installedAgents.isEmpty {
+                    Text("설치된 에이전트를 찾지 못했어요").foregroundStyle(.secondary)
+                }
+                ForEach(shownKinds, id: \.self) { kind in
+                    Toggle(isOn: Binding(get: { !agents.hiddenKinds.contains(kind) },
+                                         set: { agents.setHidden(kind, !$0) })) {
+                        Label {
+                            Text(kind.displayName)
+                            if !agents.installedAgents.contains(kind) { Text("설치 안 됨") }
+                        } icon: {
+                            Image(systemName: AgentsStyle.symbol(kind)).foregroundStyle(AgentsStyle.color(kind))
+                        }
+                    }
+                }
+            } header: {
+                Text("보이는 에이전트")
+            } footer: {
+                Text("끈 에이전트는 노치의 세션 목록 · 최근 기록 · 새 에이전트 · 사용량 · 알림에서 빠져요.")
+            }
+
+            Section {
                 LabeledContent("Terminal") {
                     switch agents.terminalPermission {
                     case .granted: Label("연결됨", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
@@ -260,6 +281,11 @@ private struct AgentSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// 설치된 에이전트와, 설치는 안 됐지만 숨겨 둔 에이전트
+    private var shownKinds: [AgentKind] {
+        AgentKind.allCases.filter { agents.installedAgents.contains($0) || agents.hiddenKinds.contains($0) }
     }
 
     private func claudeStatus(_ target: HookInstaller.ClaudeTarget) -> String {
