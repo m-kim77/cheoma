@@ -32,6 +32,18 @@ enum UsageDump {
             }
         }
 
+        print("\n로컬 모델")
+        if usage.local.isEmpty { print("  켜진 서버 없음") }
+        for server in usage.local {
+            let state = server.isServerOff ? "앱만 켜짐 · API 서버 꺼짐" : (server.address ?? "-")
+            print("  \(server.kind.displayName)  \(state)  모델 \(server.models.count)개")
+            for model in server.models {
+                let memory = model.memoryBytes.map { String(format: "%.1fGB", Double($0) / 1e9) } ?? "-"
+                print("    \(model.name)  \(model.detail ?? "")  메모리 \(memory)  컨텍스트 \(model.contextLength.map(String.init) ?? "-")"
+                      + (model.expiresAt.map { "  \(date($0))에 내려감" } ?? ""))
+            }
+        }
+
         print("\nClaude Code")
         if usage.claude.isEmpty { print("  기록 없음") }
         for account in usage.claude {

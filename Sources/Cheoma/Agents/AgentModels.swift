@@ -246,6 +246,8 @@ struct AgentUsage: Equatable, Sendable {
     var claude: [ClaudeUsage] = []
     /// 최근 24시간 세션, 최근 것부터
     var recentSessions: [RecordedSession] = []
+    /// 켜져 있는 로컬 모델 서버 (Ollama, LM Studio, Unsloth, llama.cpp)
+    var local: [LocalModelServer] = []
 }
 
 /// Codex 계정 하나 (CODEX_HOME 폴더 하나 = 계정 하나)

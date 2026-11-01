@@ -26,6 +26,21 @@ enum AgentsStyle {
         }
     }
 
+    /// 로컬 모델 서버 표시
+    static let localSymbol = "cpu"
+    static let localColor = Color(red: 0.62, green: 0.74, blue: 0.90)
+
+    /// "http://127.0.0.1:11434" → "localhost:11434"
+    static func abbreviatedAddress(_ address: String) -> String {
+        address.replacingOccurrences(of: "http://", with: "").replacingOccurrences(of: "127.0.0.1", with: "localhost")
+    }
+
+    /// 모델 메모리 ("5.2GB", "820MB")
+    static func bytes(_ value: Int64) -> String {
+        let megabytes = Double(value) / 1_048_576
+        return megabytes < 1023.5 ? String(format: "%.0fMB", megabytes) : String(format: "%.1fGB", megabytes / 1024)
+    }
+
     static func color(_ state: AgentState) -> Color {
         switch state {
         case .working: .blue
@@ -117,19 +132,31 @@ enum AgentsStyle {
 
 /// 에이전트 종류 표시 (작은 둥근 네모 안의 기호)
 struct AgentMark: View {
-    let kind: AgentKind
+    let symbol: String
+    let color: Color
+    let label: String
     var size: CGFloat = 22
     @Environment(\.agentsScale) private var scale
 
+    init(kind: AgentKind, size: CGFloat = 22) {
+        self.init(symbol: AgentsStyle.symbol(kind), color: AgentsStyle.color(kind), label: kind.displayName, size: size)
+    }
+
+    init(symbol: String, color: Color, label: String, size: CGFloat = 22) {
+        self.symbol = symbol
+        self.color = color
+        self.label = label
+        self.size = size
+    }
+
     var body: some View {
         let size = size * scale
-        Image(systemName: AgentsStyle.symbol(kind))
+        Image(systemName: symbol)
             .font(.system(size: size * 0.48, weight: .bold))
-            .foregroundStyle(AgentsStyle.color(kind))
+            .foregroundStyle(color)
             .frame(width: size, height: size)
-            .background(AgentsStyle.color(kind).opacity(0.17),
-                        in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
-            .accessibilityLabel(kind.displayName)
+            .background(color.opacity(0.17), in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
+            .accessibilityLabel(label)
     }
 }
 

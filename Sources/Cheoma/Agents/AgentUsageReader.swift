@@ -71,6 +71,7 @@ final class AgentUsageReader {
         var seen = Set<String>()
         let unique = sessions.sorted { $0.lastActivity > $1.lastActivity }.filter { seen.insert("\($0.kind.rawValue):\($0.id)").inserted }
         usage.recentSessions = Array(unique.prefix(Self.maxRecentSessions))
+        usage.local = LocalModelReader.read()
         return usage
     }
 

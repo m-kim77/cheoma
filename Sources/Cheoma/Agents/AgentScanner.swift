@@ -40,6 +40,30 @@ enum AgentScanner {
         return result.sorted { ($0.startedAt ?? .distantPast, $0.pid) < ($1.startedAt ?? .distantPast, $1.pid) }
     }
 
+    /// 이름이 같은 내 계정 프로세스 (로컬 모델 서버 llama-server 등): 실행 파일 · 인자 · 메모리 · 부모들의 실행 파일
+    struct NamedProcess {
+        var pid: pid_t
+        var path: String
+        var arguments: [String]
+        var residentBytes: Int64?
+        var ancestorPaths: [String]
+    }
+
+    static func processes(named names: Set<String>) -> [NamedProcess] {
+        let uid = getuid()
+        var table: [pid_t: Entry] = [:]
+        for pid in allPIDs() where pid > 0 {
+            if let entry = shortInfo(pid) { table[pid] = entry }
+        }
+        return table.filter { $0.value.uid == uid && names.contains($0.value.name) }.keys.sorted().map { pid in
+            var task = proc_taskinfo()
+            let size = Int32(MemoryLayout<proc_taskinfo>.size)
+            let resident = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &task, size) == size ? Int64(task.pti_resident_size) : nil
+            return NamedProcess(pid: pid, path: executablePath(of: pid), arguments: arguments(of: pid) ?? [],
+                                residentBytes: resident, ancestorPaths: ancestorChain(of: pid, in: table).map(executablePath))
+        }
+    }
+
     /// tty에 마지막으로 출력이 나간 시각 (tty 장치의 수정 시각). 화면이 바뀌는 중인지 Apple Event 없이 싸게 알 수 있다.
     /// 이 맥(macOS 26, tmux 3.8)에서 확인: tty에 글자가 쓰이면(에이전트 출력, 입력한 글자의 에코) st_mtime이 µs 단위로 바뀌고,
     /// 가만히 있으면 그대로다. 입력을 읽기만 하면 st_atime만 바뀐다. 그래서 mtime = 마지막 출력 시각으로 쓸 수 있다

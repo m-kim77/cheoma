@@ -452,3 +452,44 @@ final class AgentsSizeTests: XCTestCase {
         XCTAssertEqual(AgentsTextScale.allCases.map(\.rawValue), AgentsTextScale.allCases.map(\.rawValue).sorted())
     }
 }
+
+/// 로컬 모델 서버 응답 읽기 (Ollama /api/ps, LM Studio /api/v0/models, llama-server 인자)
+final class LocalModelTests: XCTestCase {
+    private func json(_ text: String) throws -> [String: Any] {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+    }
+
+    func testOllamaRunningModel() throws {
+        let item = try json("""
+        {"name":"qwen3:8b","model":"qwen3:8b","size":6200000000,"size_vram":6200000000,
+         "details":{"parameter_size":"8.2B","quantization_level":"Q4_K_M"},
+         "expires_at":"2026-11-02T02:10:00.123456789+09:00","context_length":40960}
+        """)
+        let model = LocalModelReader.ollamaModel(item)
+        XCTAssertEqual(model.name, "qwen3:8b")
+        XCTAssertEqual(model.memoryBytes, 6_200_000_000)
+        XCTAssertEqual(model.detail, "8.2B · Q4_K_M")
+        XCTAssertEqual(model.contextLength, 40_960)
+        XCTAssertEqual(model.expiresAt.map { Int($0.timeIntervalSince1970) }, 1_793_553_000)
+    }
+
+    func testLMStudioLoadedModel() throws {
+        let item = try json("""
+        {"id":"qwen3-8b","type":"llm","arch":"qwen3","quantization":"Q4_K_M","state":"loaded",
+         "max_context_length":40960,"loaded_context_length":8192}
+        """)
+        let model = LocalModelReader.lmStudioModel(item)
+        XCTAssertEqual(model.name, "qwen3-8b")
+        XCTAssertEqual(model.detail, "qwen3 · Q4_K_M")
+        XCTAssertEqual(model.contextLength, 8_192)
+    }
+
+    func testLlamaServerArguments() {
+        let plain = LocalModelReader.llamaServerArguments(["llama-server", "-m", "/m/Qwen3-8B-Q4_K_M.gguf", "--port", "8099", "-c", "8192"])
+        XCTAssertEqual(plain.model.map(LocalModelReader.modelName), "Qwen3-8B-Q4_K_M")
+        XCTAssertEqual(plain.port, 8099)
+        let alias = LocalModelReader.llamaServerArguments(["llama-server", "--model", "/m/x.gguf", "--alias", "gemma-4-12B"])
+        XCTAssertEqual(alias.model, "gemma-4-12B")
+        XCTAssertEqual(alias.port, 8080)
+    }
+}

@@ -38,10 +38,11 @@ struct AgentsAccountsPane: View {
     private enum Item {
         case claude(ClaudeUsage)
         case codex(CodexAccountUsage)
+        case local(LocalModelServer)
     }
 
     private var cardItems: [Item] {
-        store.visibleUsage.claude.map(Item.claude) + store.visibleUsage.codex.map(Item.codex)
+        store.visibleUsage.claude.map(Item.claude) + store.visibleUsage.codex.map(Item.codex) + store.visibleUsage.local.map(Item.local)
     }
 
     @ViewBuilder
@@ -51,6 +52,8 @@ struct AgentsAccountsPane: View {
             ClaudeAccountCard(account: account, running: store.sessions.filter { $0.account == account.account && $0.state != .exited }.count)
         case .codex(let codex):
             CodexAccountCard(account: codex, isOnly: store.usage.codex.count == 1, running: runningCodex(codex))
+        case .local(let server):
+            LocalServerCard(server: server)
         }
     }
 
@@ -70,7 +73,7 @@ private struct ClaudeAccountCard: View {
     let running: Int
 
     var body: some View {
-        AccountCard(kind: .claude, title: AgentsStyle.accountName(account.account), plan: account.plan,
+        AccountCard(mark: AgentMark(kind: .claude), tint: AgentsStyle.color(.claude), title: AgentsStyle.accountName(account.account), plan: account.plan,
                     email: account.email ?? "로그인 정보 없음") {
             if account.limits.isEmpty {
                 Text("한도 정보 없음 · 이 계정으로 Claude Code를 한 번 쓰면 보여요")
@@ -107,7 +110,7 @@ private struct CodexAccountCard: View {
     var body: some View {
         let login = account.login
         let usage = account.usage
-        AccountCard(kind: .codex, title: isOnly && account.account == ".codex" ? "Codex" : "Codex · \(AgentsStyle.accountName(account.account))",
+        AccountCard(mark: AgentMark(kind: .codex), tint: AgentsStyle.color(.codex), title: isOnly && account.account == ".codex" ? "Codex" : "Codex · \(AgentsStyle.accountName(account.account))",
                     plan: (login?.plan ?? usage?.plan).map { $0.prefix(1).uppercased() + $0.dropFirst() },
                     email: login?.email ?? (login?.mode == "apikey" ? "API 키로 로그인" : "로그인 정보 없음")) {
             let windows = [usage?.primary, usage?.secondary].compactMap { $0 }
@@ -127,8 +130,54 @@ private struct CodexAccountCard: View {
     }
 }
 
+/// 로컬 모델 서버: 올라온 모델마다 이름 · 메모리 · 컨텍스트
+private struct LocalServerCard: View {
+    let server: LocalModelServer
+
+    var body: some View {
+        AccountCard(mark: AgentMark(symbol: AgentsStyle.localSymbol, color: AgentsStyle.localColor, label: server.kind.displayName),
+                    tint: AgentsStyle.localColor, title: server.kind.displayName, plan: "로컬",
+                    email: server.address.map(AgentsStyle.abbreviatedAddress) ?? "API 서버 꺼짐") {
+            if server.models.isEmpty {
+                Text(server.isServerOff ? "개발자 탭에서 서버를 켜면 올라온 모델이 보여요" : "올라온 모델 없음")
+                    .agentsFont(size: 9.5)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ForEach(Array(server.models.enumerated()), id: \.offset) { _, model in
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 4) {
+                            Text(model.name)
+                                .agentsFont(size: 10.5, weight: .semibold)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 4)
+                            if let bytes = model.memoryBytes, bytes > 0 {
+                                Text(AgentsStyle.bytes(bytes))
+                                    .agentsFont(size: 10, weight: .semibold)
+                                    .monospacedDigit()
+                            }
+                        }
+                        let detail = [model.detail, model.contextLength.map { "컨텍스트 \(AgentsStyle.tokens($0))" },
+                                      model.expiresAt.map { "\(AgentsStyle.until($0)) 내려감" }].compactMap { $0 }
+                        if !detail.isEmpty {
+                            Text(detail.joined(separator: " · "))
+                                .agentsFont(size: 9)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            }
+        } footer: {
+            Text(server.models.isEmpty ? "켜져 있음" : "모델 \(server.models.count)개 올라옴")
+        }
+    }
+}
+
 private struct AccountCard<Bars: View, Footer: View>: View {
-    let kind: AgentKind
+    let mark: AgentMark
+    let tint: Color
     let title: String
     let plan: String?
     let email: String
@@ -138,7 +187,7 @@ private struct AccountCard<Bars: View, Footer: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 7) {
-                AgentMark(kind: kind, size: 22)
+                mark
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 5) {
                         Text(title)
@@ -147,10 +196,10 @@ private struct AccountCard<Bars: View, Footer: View>: View {
                         if let plan {
                             Text(plan)
                                 .agentsFont(size: 9, weight: .bold)
-                                .foregroundStyle(AgentsStyle.color(kind))
+                                .foregroundStyle(tint)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
-                                .background(AgentsStyle.color(kind).opacity(0.18), in: Capsule())
+                                .background(tint.opacity(0.18), in: Capsule())
                                 .fixedSize()
                         }
                     }

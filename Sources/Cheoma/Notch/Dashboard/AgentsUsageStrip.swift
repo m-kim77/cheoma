@@ -12,23 +12,36 @@ struct AgentsUsageStrip: View {
         // 계정은 되도록 다 보이게 단추부터 줄인다. Codex 계정이 여럿이면 Claude처럼 한 카드에 계정마다 한 줄
         let codex = usage.codex.filter { $0.usage?.primary != nil || $0.usage?.secondary != nil }
         let named = codex.count > 1
+        // 로컬 모델은 올라온 게 있을 때만, 자리가 모자라면 Claude 계정을 줄이기 전에 뺀다
+        let local = usage.local.filter { !$0.models.isEmpty }
+        // 줄이는 순서: 단추 → 로컬 카드를 요약으로 → Codex 막대를 계정마다 하나로 → Claude도 → 로컬 빼기 → Claude 계정 빼기
         ViewThatFits(in: .horizontal) {
-            row(codex: codex, named: named, codexCompact: false, claude: usage.claude, compact: false, compactButtons: false)
-            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, compact: false, compactButtons: false)
-            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, compact: false, compactButtons: true)
-            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, compact: true, compactButtons: true)
-            // 계정을 빼기 전에 계정마다 막대를 하나만 (5시간, 없으면 첫 한도)
-            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, compact: true, compactButtons: true, firstOnly: true)
-            row(codex: codex, named: named, codexCompact: true, claude: Array(usage.claude.prefix(2)), compact: true, compactButtons: true, firstOnly: true)
-            row(codex: codex, named: named, codexCompact: true, claude: Array(usage.claude.prefix(1)), compact: true, compactButtons: true, firstOnly: true)
+            row(codex: codex, named: named, codexCompact: false, claude: usage.claude, local: local, compact: false, compactButtons: false)
+            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: false, compactButtons: false)
+            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: false, compactButtons: true)
+            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: true, compactButtons: true)
+            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: true, compactButtons: true,
+                localCompact: true)
+            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: true, compactButtons: true,
+                localCompact: true, codexFirstOnly: true)
+            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: true, compactButtons: true,
+                localCompact: true, codexFirstOnly: true, claudeFirstOnly: true)
+            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: [], compact: true, compactButtons: true,
+                codexFirstOnly: true, claudeFirstOnly: true)
+            row(codex: codex, named: named, codexCompact: true, claude: Array(usage.claude.prefix(2)), local: [], compact: true,
+                compactButtons: true, codexFirstOnly: true, claudeFirstOnly: true)
+            row(codex: codex, named: named, codexCompact: true, claude: Array(usage.claude.prefix(1)), local: [], compact: true,
+                compactButtons: true, codexFirstOnly: true, claudeFirstOnly: true)
         }
         .agentsFrame(height: Self.height)
     }
 
-    private func row(codex: [CodexAccountUsage], named: Bool, codexCompact: Bool, claude: [ClaudeUsage], compact: Bool,
-                     compactButtons: Bool, firstOnly: Bool = false) -> some View {
+    private func row(codex: [CodexAccountUsage], named: Bool, codexCompact: Bool, claude: [ClaudeUsage], local: [LocalModelServer],
+                     compact: Bool, compactButtons: Bool, localCompact: Bool = false, codexFirstOnly: Bool = false,
+                     claudeFirstOnly: Bool = false) -> some View {
         HStack(spacing: 8) {
-            cards(codex: codex, named: named, codexCompact: codexCompact, claude: claude, compact: compact, firstOnly: firstOnly)
+            cards(codex: codex, named: named, codexCompact: codexCompact, claude: claude, local: local, compact: compact,
+                  localCompact: localCompact, codexFirstOnly: codexFirstOnly, claudeFirstOnly: claudeFirstOnly)
                 // 사용량 카드를 누르면 계정 한눈에 보기
                 .contentShape(Rectangle())
                 .onTapGesture { pane = pane == .accounts ? .session : .accounts }
@@ -38,22 +51,23 @@ struct AgentsUsageStrip: View {
     }
 
     /// named: Codex 계정이 여럿이라 카드에 계정 이름을 붙인다
-    private func cards(codex: [CodexAccountUsage], named: Bool, codexCompact: Bool, claude: [ClaudeUsage], compact: Bool,
-                       firstOnly: Bool) -> some View {
+    private func cards(codex: [CodexAccountUsage], named: Bool, codexCompact: Bool, claude: [ClaudeUsage], local: [LocalModelServer],
+                       compact: Bool, localCompact: Bool, codexFirstOnly: Bool, claudeFirstOnly: Bool) -> some View {
         HStack(spacing: 8) {
             // 계정이 하나면 큰 막대, 여럿이면 Claude처럼 한 카드에 계정마다 한 줄
             if named {
-                CodexLimitsCard(accounts: codex, firstOnly: firstOnly)
+                CodexLimitsCard(accounts: codex, firstOnly: codexFirstOnly)
             } else if let account = codex.first, let limits = account.usage {
                 CodexUsageCard(usage: limits, compact: codexCompact,
                                name: account.account != ".codex" ? AgentsStyle.accountName(account.account) : nil)
             }
             if !claude.isEmpty {
                 switch display {
-                case .limits: ClaudeLimitsCard(accounts: claude, firstOnly: firstOnly)
+                case .limits: ClaudeLimitsCard(accounts: claude, firstOnly: claudeFirstOnly)
                 case .cost: ClaudeUsageCard(accounts: claude, compact: compact)
                 }
             }
+            if !local.isEmpty { LocalModelsCard(servers: local, compact: localCompact) }
         }
         .fixedSize()
     }
@@ -377,6 +391,73 @@ private struct ClaudeUsageCard: View {
         lines.append("지금 5시간 구간 \(AgentsStyle.cost(account.blockCostUSD))")
         if let end = account.blockEndsAt, end > Date() { lines.append("구간은 \(AgentsStyle.until(end)) 끝나요") }
         return lines.joined(separator: "\n")
+    }
+}
+
+/// 메모리에 올라온 로컬 모델: 모델 하나에 한 줄 ("Ollama  qwen3:8b  5.2GB"). 두 줄이 넘으면 아래로 스크롤
+private struct LocalModelsCard: View {
+    let servers: [LocalModelServer]
+    /// 제목과 모델 수 · 메모리 합만
+    var compact = false
+
+    private var rows: [(server: String, model: LocalModel)] {
+        servers.flatMap { server in server.models.map { (server.kind.displayName, $0) } }
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("로컬")
+                    .agentsFont(size: 10, weight: .semibold)
+                    .foregroundStyle(AgentsStyle.localColor)
+                Text(compact ? summary : "모델 \(rows.count)개")
+                    .agentsFont(size: 9)
+                    .foregroundStyle(.tertiary)
+            }
+            .lineLimit(1)
+            .fixedSize()
+            if compact {
+                EmptyView()
+            } else if rows.count > 2 {
+                ScrollView(.vertical, showsIndicators: false) { grid.padding(.vertical, 4) }
+                    .fixedSize(horizontal: true, vertical: false)
+            } else {
+                grid
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(maxHeight: .infinity)
+        .background(AgentsStyle.cardFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .help(rows.map { row in
+            "\(row.server) · \(row.model.name)" + (row.model.memoryBytes.map { " · \(AgentsStyle.bytes($0))" } ?? "")
+        }.joined(separator: "\n"))
+    }
+
+    /// "모델 2개 · 9.4GB"
+    private var summary: String {
+        let total = rows.compactMap(\.model.memoryBytes).reduce(0, +)
+        return "모델 \(rows.count)개" + (total > 0 ? " · \(AgentsStyle.bytes(total))" : "")
+    }
+
+    private var grid: some View {
+        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 3) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                GridRow {
+                    Text(row.server)
+                        .agentsFont(size: 9.5)
+                        .foregroundStyle(.secondary)
+                    // 긴 이름은 앞부분만 (카드가 사용량 줄을 다 차지하지 않게)
+                    Text(row.model.name.count > 26 ? row.model.name.prefix(25) + "…" : row.model.name)
+                        .agentsFont(size: 10.5, weight: .semibold)
+                    Text(row.model.memoryBytes.map(AgentsStyle.bytes) ?? "")
+                        .agentsFont(size: 10)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                .lineLimit(1)
+                .fixedSize()
+            }
+        }
     }
 }
 
