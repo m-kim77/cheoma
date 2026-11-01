@@ -58,9 +58,15 @@ final class AgentStore: ObservableObject {
     /// 새 에이전트로 고를 수 있는 것 (설치됐고 숨기지 않은 것)
     var launchableAgents: [AgentKind] { installedAgents.filter { !hiddenKinds.contains($0) } }
 
+    /// Antigravity CLI 한도 (agy에 따로 묻는다)
+    @Published private(set) var antigravityUsage: AntigravityUsage?
+    private var lastAntigravityRead = Date.distantPast
+    private var isReadingAntigravity = false
+
     /// 숨긴 에이전트의 사용량을 뺀 것 (노치에 보여줄 것)
     var visibleUsage: AgentUsage {
         var result = usage
+        result.antigravity = hiddenKinds.contains(.antigravity) ? nil : antigravityUsage
         if hiddenKinds.contains(.claude) { result.claude = [] }
         if hiddenKinds.contains(.codex) { result.codex = [] }
         return result
@@ -329,6 +335,7 @@ final class AgentStore: ObservableObject {
         let now = Date()
         let readUsage = now.timeIntervalSince(lastUsageRead) > (isVisible ? 10 : 30)
         if readUsage { lastUsageRead = now }
+        refreshAntigravityIfNeeded(now: now)
         let plan = PollPlan(
             selectedID: isVisible ? selectedSession?.id : nil,
             terminalAllowed: terminalPermission == .granted,
@@ -349,6 +356,26 @@ final class AgentStore: ObservableObject {
                         self.pollAgain = false
                         self.poll()
                     }
+                }
+            }
+        }
+    }
+
+    /// agy 세션이 돌면 5분, 아니면 15분마다 (agy를 한 번 띄우는 데 몇 초 걸리고 로그 파일이 하나 생긴다)
+    private func refreshAntigravityIfNeeded(now: Date) {
+        guard !isReadingAntigravity, installedAgents.contains(.antigravity), !hiddenKinds.contains(.antigravity) else { return }
+        let running = sessions.contains { $0.kind == .antigravity && $0.state != .exited }
+        guard now.timeIntervalSince(lastAntigravityRead) > (running ? 300 : 900) else { return }
+        guard let executable = Self.executablePath(.antigravity) else { return }
+        isReadingAntigravity = true
+        lastAntigravityRead = now
+        DispatchQueue.global(qos: .utility).async {
+            let usage = AntigravityQuota.read(executable: executable)
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.isReadingAntigravity = false
+                    if let usage { self.antigravityUsage = usage }
                 }
             }
         }
@@ -680,12 +707,15 @@ final class AgentStore: ObservableObject {
 
     /// GUI 앱은 PATH가 짧아서, 에이전트가 흔히 설치되는 폴더를 직접 본다
     nonisolated private static func findInstalledAgents() -> [AgentKind] {
+        AgentKind.allCases.filter { executablePath($0) != nil }
+    }
+
+    /// 에이전트 실행 파일 위치 (흔히 설치되는 폴더에서)
+    nonisolated static func executablePath(_ kind: AgentKind) -> String? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let folders = ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "\(home)/.bun/bin",
                        "\(home)/.npm-global/bin", "\(home)/.volta/bin", "\(home)/.cargo/bin", "\(home)/bin"]
-        return AgentKind.allCases.filter { kind in
-            folders.contains { FileManager.default.isExecutableFile(atPath: "\($0)/\(kind.command)") }
-        }
+        return folders.map { "\($0)/\(kind.command)" }.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
     // MARK: - 백그라운드에서 모으기

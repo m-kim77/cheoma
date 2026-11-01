@@ -259,6 +259,8 @@ struct AgentUsage: Equatable, Sendable {
     var recentSessions: [RecordedSession] = []
     /// 켜져 있는 로컬 모델 서버 (Ollama, LM Studio, Unsloth, llama.cpp)
     var local: [LocalModelServer] = []
+    /// Antigravity CLI 계정 한도 (AgentStore가 따로 드물게 읽어서 채운다)
+    var antigravity: AntigravityUsage?
 }
 
 /// Codex 계정 하나 (CODEX_HOME 폴더 하나 = 계정 하나)

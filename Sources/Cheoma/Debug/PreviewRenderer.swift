@@ -83,7 +83,8 @@ enum PreviewRenderer {
             let live = AgentStore()
             live.isVisible = true
             live.start()
-            RunLoop.main.run(until: Date().addingTimeInterval(4))
+            // Antigravity 한도는 agy에 묻는 데 몇 초 걸린다
+            RunLoop.main.run(until: Date().addingTimeInterval(10))
             AgentReplyField.drawsPlaceholderOnly = true
             model.previewOpen(.agents)
             render(NotchView(model: model, stats: stats, fans: fans, agents: live), to: folder.appendingPathComponent("agents-live.png"))

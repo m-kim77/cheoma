@@ -14,7 +14,8 @@ struct AgentsUsageStrip: View {
         let named = codex.count > 1
         // 로컬 모델은 올라온 게 있을 때만, 자리가 모자라면 Claude 계정을 줄이기 전에 뺀다
         let local = usage.local.filter { !$0.models.isEmpty }
-        // 줄이는 순서: 단추 → 로컬 카드를 요약으로 → Codex 막대를 계정마다 하나로 → Claude도 → 로컬 빼기 → Claude 계정 빼기
+        // 줄이는 순서: 단추 → 로컬 카드를 요약으로 → Codex 막대를 계정마다 하나로 → Antigravity 빼기 → Claude 막대도 하나로
+        // → 로컬 빼기 → Claude 계정 빼기. 뺀 것은 계정 화면(사람 단추)에서 볼 수 있다
         ViewThatFits(in: .horizontal) {
             row(codex: codex, named: named, codexCompact: false, claude: usage.claude, local: local, compact: false, compactButtons: false)
             row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: false, compactButtons: false)
@@ -25,23 +26,26 @@ struct AgentsUsageStrip: View {
             row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: true, compactButtons: true,
                 localCompact: true, codexFirstOnly: true)
             row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: true, compactButtons: true,
-                localCompact: true, codexFirstOnly: true, claudeFirstOnly: true)
+                localCompact: true, codexFirstOnly: true, showsAntigravity: false)
+            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: true, compactButtons: true,
+                localCompact: true, codexFirstOnly: true, claudeFirstOnly: true, showsAntigravity: false)
             row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: [], compact: true, compactButtons: true,
-                codexFirstOnly: true, claudeFirstOnly: true)
+                codexFirstOnly: true, claudeFirstOnly: true, showsAntigravity: false)
             row(codex: codex, named: named, codexCompact: true, claude: Array(usage.claude.prefix(2)), local: [], compact: true,
-                compactButtons: true, codexFirstOnly: true, claudeFirstOnly: true)
+                compactButtons: true, codexFirstOnly: true, claudeFirstOnly: true, showsAntigravity: false)
             row(codex: codex, named: named, codexCompact: true, claude: Array(usage.claude.prefix(1)), local: [], compact: true,
-                compactButtons: true, codexFirstOnly: true, claudeFirstOnly: true)
+                compactButtons: true, codexFirstOnly: true, claudeFirstOnly: true, showsAntigravity: false)
         }
         .agentsFrame(height: Self.height)
     }
 
     private func row(codex: [CodexAccountUsage], named: Bool, codexCompact: Bool, claude: [ClaudeUsage], local: [LocalModelServer],
                      compact: Bool, compactButtons: Bool, localCompact: Bool = false, codexFirstOnly: Bool = false,
-                     claudeFirstOnly: Bool = false) -> some View {
+                     claudeFirstOnly: Bool = false, showsAntigravity: Bool = true) -> some View {
         HStack(spacing: 8) {
             cards(codex: codex, named: named, codexCompact: codexCompact, claude: claude, local: local, compact: compact,
-                  localCompact: localCompact, codexFirstOnly: codexFirstOnly, claudeFirstOnly: claudeFirstOnly)
+                  localCompact: localCompact, codexFirstOnly: codexFirstOnly, claudeFirstOnly: claudeFirstOnly,
+                  showsAntigravity: showsAntigravity)
                 // 사용량 카드를 누르면 계정 한눈에 보기
                 .contentShape(Rectangle())
                 .onTapGesture { pane = pane == .accounts ? .session : .accounts }
@@ -52,7 +56,7 @@ struct AgentsUsageStrip: View {
 
     /// named: Codex 계정이 여럿이라 카드에 계정 이름을 붙인다
     private func cards(codex: [CodexAccountUsage], named: Bool, codexCompact: Bool, claude: [ClaudeUsage], local: [LocalModelServer],
-                       compact: Bool, localCompact: Bool, codexFirstOnly: Bool, claudeFirstOnly: Bool) -> some View {
+                       compact: Bool, localCompact: Bool, codexFirstOnly: Bool, claudeFirstOnly: Bool, showsAntigravity: Bool) -> some View {
         HStack(spacing: 8) {
             // 계정이 하나면 큰 막대, 여럿이면 Claude처럼 한 카드에 계정마다 한 줄
             if named {
@@ -66,6 +70,9 @@ struct AgentsUsageStrip: View {
                 case .limits: ClaudeLimitsCard(accounts: claude, firstOnly: claudeFirstOnly)
                 case .cost: ClaudeUsageCard(accounts: claude, compact: compact)
                 }
+            }
+            if showsAntigravity, let antigravity = usage.antigravity, !antigravity.groups.isEmpty {
+                AntigravityLimitsCard(usage: antigravity)
             }
             if !local.isEmpty { LocalModelsCard(servers: local, compact: localCompact) }
         }
@@ -306,6 +313,22 @@ private struct CodexLimitsCard: View {
                 return "\(AgentsStyle.accountName(account.account))\(plan)\(date)"
             }).joined(separator: "\n"),
             firstOnly: firstOnly)
+    }
+}
+
+/// Antigravity CLI: 모델 묶음(Gemini, Claude · GPT)마다 한 줄
+private struct AntigravityLimitsCard: View {
+    let usage: AntigravityUsage
+
+    var body: some View {
+        AccountLimitsCard(
+            kind: .antigravity, title: "Antigravity", detail: nil,
+            rows: usage.groups.map { group in
+                .init(id: group.name, name: AntigravityQuota.shortName(group.name), windows: group.windows,
+                      emptyHelp: "agy -p /usage로 받은 한도가 없어요")
+            },
+            help: (["Antigravity 사용 한도 (agy -p /usage)", usage.email, "\(AgentsStyle.ago(usage.updatedAt)) 받음"].compactMap { $0 })
+                .joined(separator: "\n"))
     }
 }
 

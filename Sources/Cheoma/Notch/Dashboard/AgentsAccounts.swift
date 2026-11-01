@@ -38,11 +38,14 @@ struct AgentsAccountsPane: View {
     private enum Item {
         case claude(ClaudeUsage)
         case codex(CodexAccountUsage)
+        case antigravity(AntigravityUsage)
         case local(LocalModelServer)
     }
 
     private var cardItems: [Item] {
-        store.visibleUsage.claude.map(Item.claude) + store.visibleUsage.codex.map(Item.codex) + store.visibleUsage.local.map(Item.local)
+        let usage = store.visibleUsage
+        return usage.claude.map(Item.claude) + usage.codex.map(Item.codex) + (usage.antigravity.map { [Item.antigravity($0)] } ?? [])
+            + usage.local.map(Item.local)
     }
 
     @ViewBuilder
@@ -52,6 +55,9 @@ struct AgentsAccountsPane: View {
             ClaudeAccountCard(account: account, running: store.sessions.filter { $0.account == account.account && $0.state != .exited }.count)
         case .codex(let codex):
             CodexAccountCard(account: codex, isOnly: store.usage.codex.count == 1, running: runningCodex(codex))
+        case .antigravity(let usage):
+            AntigravityAccountCard(usage: usage,
+                                   running: store.sessions.filter { $0.kind == .antigravity && $0.state != .exited }.count)
         case .local(let server):
             LocalServerCard(server: server)
         }
@@ -127,6 +133,31 @@ private struct CodexAccountCard: View {
         }
         .help(["\(login?.mode == "chatgpt" ? "ChatGPT 계정으로 로그인 · " : "")\(AgentsStyle.abbreviated(account.home))/auth.json",
                "실행: \(AgentResume.launchCommand(.codex, configDir: account.home))"].joined(separator: "\n"))
+    }
+}
+
+/// Antigravity CLI: 모델 묶음마다 주간 한도
+private struct AntigravityAccountCard: View {
+    let usage: AntigravityUsage
+    let running: Int
+
+    var body: some View {
+        AccountCard(mark: AgentMark(kind: .antigravity), tint: AgentsStyle.color(.antigravity), title: "Antigravity", plan: nil,
+                    email: usage.email ?? "로그인 정보 없음") {
+            ForEach(usage.groups, id: \.name) { group in
+                ForEach(group.windows, id: \.windowMinutes) { window in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(AntigravityQuota.shortName(group.name))
+                            .agentsFont(size: 9)
+                            .foregroundStyle(.tertiary)
+                        AccountUsageBar(window: window)
+                    }
+                }
+            }
+        } footer: {
+            Text("\(running > 0 ? "세션 \(running)개 도는 중" : "도는 세션 없음") · 한도 \(AgentsStyle.ago(usage.updatedAt)) 받음")
+        }
+        .help("agy -p /usage로 받은 값이에요 (모델을 부르지 않아요)")
     }
 }
 

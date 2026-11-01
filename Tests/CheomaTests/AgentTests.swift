@@ -507,3 +507,22 @@ final class LocalModelTests: XCTestCase {
         XCTAssertEqual(alias.port, 8080)
     }
 }
+
+/// agy -p /usage --output-format json 읽기 (agy 1.4.12에서 받은 모양)
+final class AntigravityQuotaTests: XCTestCase {
+    func testParseUsage() throws {
+        let json = """
+        {"conversation_id":"","status":"SUCCESS","command":{"name":"usage","data":{"groups":[
+          {"name":"Gemini Models","buckets":[{"id":"gemini-weekly","window":"weekly","remaining_fraction":0.9869831800460815,"reset_time":"2026-11-08T16:40:04Z"}]},
+          {"name":"Claude and GPT models","buckets":[{"id":"3p-weekly","window":"weekly","remaining_fraction":1,"reset_time":"2026-11-08T16:50:27Z"}]}]}}}
+        """
+        let groups = try XCTUnwrap(AntigravityQuota.parse(Data(json.utf8)))
+        XCTAssertEqual(groups.map(\.name), ["Gemini Models", "Claude and GPT models"])
+        XCTAssertEqual(groups[0].windows.first?.windowMinutes, 10_080)
+        XCTAssertEqual(groups[0].windows.first?.usedPercent ?? 0, 1.3, accuracy: 0.01)
+        XCTAssertEqual(groups[1].windows.first?.usedPercent, 0)
+        XCTAssertEqual(groups[0].windows.first?.resetsAt, ISO8601DateFormatter().date(from: "2026-11-08T16:40:04Z"))
+        XCTAssertEqual(groups.map { AntigravityQuota.shortName($0.name) }, ["Gemini", "Claude · GPT"])
+        XCTAssertNil(AntigravityQuota.parse(Data("error: not logged in".utf8)))
+    }
+}
