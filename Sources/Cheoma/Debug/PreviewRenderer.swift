@@ -268,6 +268,22 @@ enum PreviewRenderer {
             .background(LinearGradient(colors: [Color(red: 0.22, green: 0.27, blue: 0.42), Color(red: 0.52, green: 0.38, blue: 0.48)],
                                        startPoint: .top, endPoint: .bottom))
             .environment(\.colorScheme, .dark)
+        // `--window`: 실제 창에 띄워서 찍는다. ImageRenderer는 ScrollView 안을 그리지 않는다
+        if CommandLine.arguments.contains("--window") {
+            let hosting = NSHostingView(rootView: content)
+            let window = NSWindow(contentRect: CGRect(x: -6000, y: -6000, width: size.width, height: size.height),
+                                  styleMask: [.borderless], backing: .buffered, defer: false)
+            window.contentView = hosting
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+            if let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
+                hosting.cacheDisplay(in: hosting.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?.write(to: url)
+                print("저장:", url.path)
+            }
+            window.orderOut(nil)
+            return
+        }
         let renderer = ImageRenderer(content: content)
         renderer.scale = 2
         guard let cgImage = renderer.cgImage,

@@ -8,14 +8,13 @@ struct AgentsUsageStrip: View {
     static let height: CGFloat = 38
 
     var body: some View {
-        // 자리가 모자라면 Codex를 작은 막대로, 단추를 아이콘만, Claude 비용은 토큰 수를 빼고, 그래도 모자라면 앞의 계정만 보여준다.
-        // 계정은 되도록 다 보이게 단추부터 줄인다. Codex 계정이 여럿이면 Claude처럼 한 카드에 계정마다 한 줄
-        let codex = usage.codex.filter { $0.usage?.primary != nil || $0.usage?.secondary != nil }
+        // 로그인된 구독 계정은 빼지 않는다 (한도 기록이 아직 없어도 "한도 정보 없음"으로 보인다).
+        // 자리가 모자라면 단추 → 로컬 카드를 요약으로 → Codex · Claude 막대를 계정마다 하나로 → 로컬 빼기 순서로 줄이고,
+        // 그래도 모자라면 카드들을 옆으로 스크롤한다
+        let codex = usage.codex.filter { $0.login != nil || $0.usage?.primary != nil || $0.usage?.secondary != nil }
         let named = codex.count > 1
-        // 로컬 모델은 올라온 게 있을 때만, 자리가 모자라면 Claude 계정을 줄이기 전에 뺀다
+        // 로컬 모델은 구독이 아니라서 올라온 게 있을 때만, 자리가 모자라면 뺀다
         let local = usage.local.filter { !$0.models.isEmpty }
-        // 줄이는 순서: 단추 → 로컬 카드를 요약으로 → Codex 막대를 계정마다 하나로 → Antigravity 빼기 → Claude 막대도 하나로
-        // → 로컬 빼기 → Claude 계정 빼기. 뺀 것은 계정 화면(사람 단추)에서 볼 수 있다
         ViewThatFits(in: .horizontal) {
             row(codex: codex, named: named, codexCompact: false, claude: usage.claude, local: local, compact: false, compactButtons: false)
             row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: false, compactButtons: false)
@@ -26,44 +25,50 @@ struct AgentsUsageStrip: View {
             row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: true, compactButtons: true,
                 localCompact: true, codexFirstOnly: true)
             row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: true, compactButtons: true,
-                localCompact: true, codexFirstOnly: true, showsAntigravity: false)
-            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: local, compact: true, compactButtons: true,
-                localCompact: true, codexFirstOnly: true, claudeFirstOnly: true, showsAntigravity: false)
+                localCompact: true, codexFirstOnly: true, claudeFirstOnly: true)
             row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: [], compact: true, compactButtons: true,
-                codexFirstOnly: true, claudeFirstOnly: true, showsAntigravity: false)
-            row(codex: codex, named: named, codexCompact: true, claude: Array(usage.claude.prefix(2)), local: [], compact: true,
-                compactButtons: true, codexFirstOnly: true, claudeFirstOnly: true, showsAntigravity: false)
-            row(codex: codex, named: named, codexCompact: true, claude: Array(usage.claude.prefix(1)), local: [], compact: true,
-                compactButtons: true, codexFirstOnly: true, claudeFirstOnly: true, showsAntigravity: false)
+                codexFirstOnly: true, claudeFirstOnly: true)
+            row(codex: codex, named: named, codexCompact: true, claude: usage.claude, local: [], compact: true, compactButtons: true,
+                codexFirstOnly: true, claudeFirstOnly: true, scrolls: true)
         }
         .agentsFrame(height: Self.height)
     }
 
     private func row(codex: [CodexAccountUsage], named: Bool, codexCompact: Bool, claude: [ClaudeUsage], local: [LocalModelServer],
                      compact: Bool, compactButtons: Bool, localCompact: Bool = false, codexFirstOnly: Bool = false,
-                     claudeFirstOnly: Bool = false, showsAntigravity: Bool = true) -> some View {
-        HStack(spacing: 8) {
-            cards(codex: codex, named: named, codexCompact: codexCompact, claude: claude, local: local, compact: compact,
-                  localCompact: localCompact, codexFirstOnly: codexFirstOnly, claudeFirstOnly: claudeFirstOnly,
-                  showsAntigravity: showsAntigravity)
-                // 사용량 카드를 누르면 계정 한눈에 보기
-                .contentShape(Rectangle())
-                .onTapGesture { pane = pane == .accounts ? .session : .accounts }
-            Spacer(minLength: 0)
+                     claudeFirstOnly: Bool = false, scrolls: Bool = false) -> some View {
+        let cards = cards(codex: codex, named: named, codexCompact: codexCompact, claude: claude, local: local, compact: compact,
+                          localCompact: localCompact, codexFirstOnly: codexFirstOnly, claudeFirstOnly: claudeFirstOnly)
+            // 사용량 카드를 누르면 계정 한눈에 보기
+            .contentShape(Rectangle())
+            .onTapGesture { pane = pane == .accounts ? .session : .accounts }
+        return HStack(spacing: 8) {
+            if scrolls {
+                ScrollView(.horizontal, showsIndicators: false) { cards }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                cards
+                Spacer(minLength: 0)
+            }
             buttons(compact: compactButtons)
         }
     }
 
     /// named: Codex 계정이 여럿이라 카드에 계정 이름을 붙인다
     private func cards(codex: [CodexAccountUsage], named: Bool, codexCompact: Bool, claude: [ClaudeUsage], local: [LocalModelServer],
-                       compact: Bool, localCompact: Bool, codexFirstOnly: Bool, claudeFirstOnly: Bool, showsAntigravity: Bool) -> some View {
+                       compact: Bool, localCompact: Bool, codexFirstOnly: Bool, claudeFirstOnly: Bool) -> some View {
         HStack(spacing: 8) {
             // 계정이 하나면 큰 막대, 여럿이면 Claude처럼 한 카드에 계정마다 한 줄
             if named {
                 CodexLimitsCard(accounts: codex, firstOnly: codexFirstOnly)
-            } else if let account = codex.first, let limits = account.usage {
-                CodexUsageCard(usage: limits, compact: codexCompact,
-                               name: account.account != ".codex" ? AgentsStyle.accountName(account.account) : nil)
+            } else if let account = codex.first {
+                if let limits = account.usage, limits.primary != nil || limits.secondary != nil {
+                    CodexUsageCard(usage: limits, compact: codexCompact,
+                                   name: account.account != ".codex" ? AgentsStyle.accountName(account.account) : nil)
+                } else {
+                    // 로그인은 했지만 아직 Codex를 쓰지 않아 한도 기록이 없다
+                    CodexLimitsCard(accounts: [account])
+                }
             }
             if !claude.isEmpty {
                 switch display {
@@ -71,7 +76,7 @@ struct AgentsUsageStrip: View {
                 case .cost: ClaudeUsageCard(accounts: claude, compact: compact)
                 }
             }
-            if showsAntigravity, let antigravity = usage.antigravity, !antigravity.groups.isEmpty {
+            if let antigravity = usage.antigravity, !antigravity.groups.isEmpty {
                 AntigravityLimitsCard(usage: antigravity)
             }
             if !local.isEmpty { LocalModelsCard(servers: local, compact: localCompact) }
@@ -301,7 +306,7 @@ private struct CodexLimitsCard: View {
 
     var body: some View {
         AccountLimitsCard(
-            kind: .codex, title: "Codex", detail: "계정 \(accounts.count)개",
+            kind: .codex, title: "Codex", detail: accounts.count > 1 ? "계정 \(accounts.count)개" : nil,
             rows: accounts.map { account in
                 .init(id: account.home, name: AgentsStyle.accountName(account.account),
                       windows: [account.usage?.primary, account.usage?.secondary].compactMap { $0 },
