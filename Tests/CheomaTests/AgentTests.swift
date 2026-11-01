@@ -28,6 +28,8 @@ final class AgentScreenParserTests: XCTestCase {
             "pi-idle": .needsInput, "pi-typed": .needsInput, "pi-finished": .needsInput, "pi-error": .needsInput,
             "pi-working": .working, "pi-working2": .working, "pi-model-picker": .needsChoice,
             "opencode-idle": .needsInput, "opencode-no-provider": .needsInput,
+            "hermes-idle": .needsInput, "hermes-typed": .needsInput, "hermes-rate-limited": .needsInput,
+            "hermes-working": .working, "hermes-working2": .working, "hermes-telemetry": .needsChoice,
         ]
         for (name, state) in expected {
             XCTAssertEqual(try analyze(name).state, state, name)
@@ -41,6 +43,15 @@ final class AgentScreenParserTests: XCTestCase {
         XCTAssertEqual(analysis.choices.first?.label, "Yes")
         XCTAssertEqual(analysis.choices.filter(\.isHighlighted).map(\.key), ["4"])
         XCTAssertFalse(analysis.choices.contains(where: \.needsEnter))
+    }
+
+    func testHermesTelemetryMenuBelowHint() throws {
+        let analysis = try analyze("hermes-telemetry")
+        XCTAssertEqual(analysis.question, "Help improve Hermes?")
+        XCTAssertEqual(analysis.choices.map(\.label), ["Collect and send to Nous", "Collect locally only", "No thanks"])
+        XCTAssertEqual(analysis.choices.filter(\.isHighlighted).map(\.label), ["No thanks"])
+        XCTAssertEqual(try analyze("hermes-working2").summary, "(¬‿¬) brainstorming...")
+        XCTAssertTrue(try analyze("hermes-rate-limited").summary?.hasPrefix("ChatGPT or Codex Subscription rate-limited") ?? false)
     }
 
     func testClaudeQuestionSkipsDescriptionsAndSeparator() throws {

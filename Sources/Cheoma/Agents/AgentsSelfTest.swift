@@ -57,6 +57,10 @@ enum AgentsSelfTest {
             ("/usr/bin/python3", ["python3", "-m", "aider", "--model", "x"], .aider),
             ("/Library/Frameworks/Python.framework/Versions/3.12/Resources/Python.app/Contents/MacOS/Python",
              ["python3", "/usr/local/bin/aider"], .aider),
+            // Hermes Agent: Homebrew의 Python이 스크립트를 돌린다
+            ("/opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python",
+             ["/opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python",
+              "/opt/homebrew/Cellar/hermes-agent/0.22.2/libexec/bin/hermes"], .hermes),
             // 에이전트가 아닌 것
             ("/opt/homebrew/bin/node", ["node", "/Users/me/app/server.js", "--root", "/Users/me/claude"], nil),
             ("/opt/homebrew/bin/node", ["node"], nil),

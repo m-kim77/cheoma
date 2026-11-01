@@ -59,7 +59,7 @@ enum AgentScanner {
 
     /// 바로 실행되는 에이전트 실행 파일 이름
     private static let nativeNames: [String: AgentKind] = [
-        "claude": .claude, "codex": .codex, "opencode": .opencode, "pi": .pi, "gemini": .gemini, "aider": .aider,
+        "claude": .claude, "codex": .codex, "opencode": .opencode, "pi": .pi, "hermes": .hermes, "gemini": .gemini, "aider": .aider,
     ]
 
     /// 인터프리터(node 등)로 도는 CLI: 스크립트 경로에 이 글자가 들어 있으면 그 종류
@@ -69,6 +69,8 @@ enum AgentScanner {
         ("@google/gemini-cli", .gemini),
         ("pi-coding-agent", .pi),
         ("opencode-ai", .opencode),
+        // Hermes Agent는 Python 스크립트 (…/hermes-agent/…/libexec/bin/hermes)
+        ("hermes-agent", .hermes),
     ]
 
     /// 실행 파일 경로와 인자(argv)로 에이전트 종류를 가린다. 에이전트가 아니면 nil

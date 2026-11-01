@@ -1,0 +1,40 @@
+│  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⡿⠛⢁⡈⠛⢿⣿⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                           delegation: delegate_task                                  │
+│  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠿⣿⣦⣤⣈⠁⢠⣴⣿⠿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                           file: patch, read_file, search_files, write_file           │
+│  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠻⢿⣿⣦⡉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                           image_gen: image_generate                                  │
+│  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⢷⣦⣈⠛⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                           memory: memory                                             │
+│  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣴⠦⠈⠙⠿⣦⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                           (and 6 more toolsets...)                                   │
+│  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⣿⣤⡈⠁⢤⣿⠇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                                                                                      │
+│  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠛⠷⠄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                           Available Skills                                           │
+│  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⠑⢶⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                           apple: apple-notes, apple-reminders, findmy, imessage      │
+│  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⠁⢰⡆⠈⡿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                           autonomous-ai-agents: claude-code, codex, +3 more          │
+│  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⠈⣡⠞⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                           creative: architecture-diagram, ascii-art, +14 more        │
+│  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                           email: himalaya                                            │
+│                                                           github: codebase-inspection, github-auth, +4 more          │
+│  gpt-5.6-sol · Nous Research                              media: gif-search, songsee, youtube-content                │
+│  /private/tmp/claude-501/-Users-mjkim-Documents-project…  mlops: evaluating-llms-harness, huggingface-hub, +3 more   │
+│  Session: 20261102_012505_988b32                          note-taking: obsidian                                      │
+│                                                           productivity: airtable, docx, google-workspace, maps, +7   │
+│                                                           more                                                       │
+│                                                           research: arxiv, blogwatcher, grounded-citations, +3 more  │
+│                                                           smart-home: openhue                                        │
+│                                                           social-media: xurl                                         │
+│                                                           software-development: dogfood, +10 more                    │
+│                                                                                                                      │
+│                                                           20 tools · 71 skills · /help for commands                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+Welcome to Hermes Agent! Type your message or /help for commands.
+✦ Tip: Quick commands support two types: exec (run shell command directly) and alias (redirect to another command).
+
+💾 curator: auto: no changes; llm: skipped (consolidation off)
+
+────────────────────────────────────────
+● Reply with just the word hello.
+Initializing agent...
+────────────────────────────────────────
+
+
+ ☤ gpt-5.6-sol │ 0/272K │ [░░░░░░░░░░] 0% │ 25s │ ⏱ 0s
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+☤ ❯ msg=interrupt · /queue · /bg · /steer · Ctrl+C cancel
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

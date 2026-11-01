@@ -5,7 +5,7 @@ import Foundation
 
 /// 노치에서 지켜보는 코드 에이전트 종류
 enum AgentKind: String, CaseIterable, Codable, Sendable {
-    case claude, codex, opencode, pi, gemini, aider
+    case claude, codex, opencode, pi, hermes, gemini, aider
 
     var displayName: String {
         switch self {
@@ -13,6 +13,7 @@ enum AgentKind: String, CaseIterable, Codable, Sendable {
         case .codex: "Codex"
         case .opencode: "OpenCode"
         case .pi: "pi"
+        case .hermes: "Hermes"
         case .gemini: "Gemini CLI"
         case .aider: "Aider"
         }

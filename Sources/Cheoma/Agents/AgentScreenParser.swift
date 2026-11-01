@@ -96,11 +96,19 @@ enum AgentScreenParser {
     private static func cursorMenu(_ lines: [String]) -> Menu? {
         let top = max(0, lines.count - 6)
         guard let hintRow = (top..<lines.count).last(where: { isMenuHint(lines[$0]) }) else { return nil }
-        let searchTop = max(0, hintRow - 16)
-        guard let cursorRow = (searchTop..<hintRow).last(where: { row in
+        func isCursorRow(_ row: Int) -> Bool {
             guard let (column, label, cursor) = cursorItem(lines[row]) else { return false }
             return cursor && column > 0 && !label.isEmpty
-        }), let (column, _, _) = cursorItem(lines[cursorRow]) else { return nil }
+        }
+        // 선택지는 보통 안내 줄 위에 있다. Hermes처럼 안내가 위에 있으면 아래에서 찾는다
+        var searchTop = max(0, hintRow - 16)
+        var searchEnd = hintRow
+        if !(searchTop..<searchEnd).contains(where: isCursorRow) {
+            searchTop = hintRow + 1
+            searchEnd = lines.count
+        }
+        guard searchTop < searchEnd, let cursorRow = (searchTop..<searchEnd).last(where: isCursorRow),
+              let (column, _, _) = cursorItem(lines[cursorRow]) else { return nil }
 
         func sibling(_ row: Int) -> (label: String, cursor: Bool)? {
             guard let (itemColumn, label, cursor) = cursorItem(lines[row]), itemColumn == column, !label.isEmpty,
@@ -110,7 +118,7 @@ enum AgentScreenParser {
         var first = cursorRow
         while first - 1 >= searchTop, sibling(first - 1) != nil { first -= 1 }
         var last = cursorRow
-        while last + 1 < hintRow, sibling(last + 1) != nil { last += 1 }
+        while last + 1 < searchEnd, sibling(last + 1) != nil { last += 1 }
         let items = (first...last).compactMap(sibling)
         guard items.count >= 2, items.count <= 20 else { return nil }
         let choices = items.map { AgentChoice(key: "", label: cleanLabel($0.label), isHighlighted: $0.cursor) }
@@ -161,13 +169,13 @@ enum AgentScreenParser {
 
     /// 선택지 위의 질문: 물음표가 있는 줄을 먼저 찾고, 없으면 바로 위의 의미 있는 줄
     private static func question(above row: Int, in lines: [String]) -> String? {
-        let top = max(0, row - 10)
+        let top = max(0, row - 14)
         var nearest: String?
         var index = row - 1
         while index >= top {
             let line = lines[index].trimmingCharacters(in: .whitespaces)
             index -= 1
-            if line.isEmpty || isSeparator(line) || line.contains("://") { continue }
+            if line.isEmpty || isSeparator(line) || line.contains("://") || isMenuHint(line) { continue }
             if let first = line.first, cursors.contains(first), line.count <= 2 { continue }
             if let mark = line.firstIndex(of: "?") {
                 return trimDecoration(String(line[...mark]))
@@ -181,11 +189,16 @@ enum AgentScreenParser {
         let lower = line.lowercased()
         return lower.contains("enter to") || lower.contains("press enter") || lower.contains("esc to cancel")
             || lower.contains("to navigate") || lower.contains("esc to go back")
+            || (lower.contains("navigate") && lower.contains("select"))
     }
 
     /// 이름 끝의 단축키 표시 "(y)", "(esc)", "(shift+tab)"를 뗀다
     private static func cleanLabel(_ label: String) -> String {
         var text = label.trimmingCharacters(in: .whitespaces)
+        // 라디오 단추 표시 "(○) ", "(●) " (Hermes)
+        for mark in ["(○) ", "(●) ", "( ) ", "(x) ", "[ ] ", "[x] "] where text.hasPrefix(mark) {
+            text = String(text.dropFirst(mark.count))
+        }
         if text.hasSuffix(")"), let open = text.lastIndex(of: "(") {
             let inside = text[text.index(after: open)..<text.index(before: text.endIndex)]
             if !inside.isEmpty, inside.count <= 10, inside.allSatisfy({ $0.isLetter || $0 == "+" }) {
@@ -204,7 +217,7 @@ enum AgentScreenParser {
         for line in lines[top...] {
             let lower = line.lowercased()
             if lower.contains("esc to interrupt") || lower.contains("esc interrupt") || lower.contains("ctrl+c to interrupt")
-                || lower.contains("esc to cancel)") || hasSpinner(line) {
+                || lower.contains("esc to cancel)") || lower.contains("msg=interrupt") || hasSpinner(line) {
                 found = true
                 break
             }
@@ -218,6 +231,8 @@ enum AgentScreenParser {
             if hasSpinner(line) || text.hasPrefix("Working") || (text.contains("…") && (text.contains("(") || claudeSpinner)) {
                 return text
             }
+            // Hermes: "(¬‿¬) brainstorming...", "Initializing agent..."
+            if text.hasSuffix("..."), text.count <= 60 { return text }
         }
         return "작업 중"
     }
@@ -243,7 +258,7 @@ enum AgentScreenParser {
         let bottom = lines[max(0, lines.count - 8)...]
         if bottom.contains(where: { $0.contains("Press Ctrl-C again to exit") }) { return true }
         switch kind {
-        case .claude:
+        case .claude, .hermes:
             // 구분선 사이의 "❯ " 줄
             return bottom.indices.contains { row in
                 isPromptLine(lines[row]) && row > 0 && isSeparator(lines[row - 1])
@@ -278,6 +293,7 @@ enum AgentScreenParser {
         case .codex: ["• ", "■ ", "⚠ "]
         default: []
         }
+        if kind == .hermes { return hermesMessage(lines) }
         if !bullets.isEmpty {
             for line in lines.reversed() {
                 let text = line.trimmingCharacters(in: .whitespaces)
@@ -293,6 +309,17 @@ enum AgentScreenParser {
             let text = trimDecoration(line)
             guard text.count >= 2, !isChrome(text) else { continue }
             return shorten(text)
+        }
+        return nil
+    }
+
+    /// Hermes는 답을 "─ ☤ Hermes ───" 상자 안에 쓴다. 마지막 상자의 첫 줄
+    private static func hermesMessage(_ lines: [String]) -> String? {
+        guard let header = lines.lastIndex(where: { $0.contains("☤ Hermes") && $0.contains("─") }) else { return nil }
+        for line in lines[(header + 1)...] {
+            if isSeparator(line) { break }
+            let text = trimDecoration(line)
+            if !text.isEmpty { return shorten(text) }
         }
         return nil
     }
