@@ -226,6 +226,25 @@ final class AgentStore: ObservableObject {
         start(kind, command: command, in: folder)
     }
 
+    /// 구독 계정 하나 더: 폴더 · alias를 만들고 Terminal 새 창에서 로그인을 시작한다
+    func addAccount(_ plan: AccountSetup.Plan) {
+        queue.async {
+            do {
+                try AccountSetup.prepare(plan)
+                try TerminalAppBridge.shared.openTab(command: plan.loginCommand, in: nil)
+                let note = plan.aliasExists ? "" : " · 새 터미널부터 \(plan.aliasName)로 실행돼요"
+                DispatchQueue.main.async { [weak self] in
+                    MainActor.assumeIsolated { self?.show(message: "Terminal에서 로그인해 주세요\(note)") }
+                }
+            } catch {
+                let text = (error as? AgentBridgeError)?.message ?? error.localizedDescription
+                DispatchQueue.main.async { [weak self] in
+                    MainActor.assumeIsolated { self?.show(message: "계정을 추가하지 못했어요: \(text) · 직접 실행: \(plan.loginCommand)") }
+                }
+            }
+        }
+    }
+
     /// 끝난 세션(또는 다른 계정으로 옮길 세션)을 새 tmux 세션에서 이어서 한다.
     /// 다른 Claude 계정으로 이으면 대화 기록을 그 계정으로 복사해 두고 그 계정으로 띄운다
     func resume(_ target: AgentResume.Target, configDir: String?) {

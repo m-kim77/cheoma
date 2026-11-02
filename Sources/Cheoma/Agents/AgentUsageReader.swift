@@ -51,7 +51,9 @@ final class AgentUsageReader {
         claudeAccounts = claudeAccounts.filter { dirs.contains($0.key) }
         learnRates(accounts: dirs.compactMap { claudeAccounts[$0] }, now: now)
         for dir in dirs {
-            guard let account = claudeAccounts[dir], FileManager.default.fileExists(atPath: dir + "/projects") else { continue }
+            guard let account = claudeAccounts[dir],
+                  FileManager.default.fileExists(atPath: dir + "/projects") || FileManager.default.fileExists(atPath: dir + "/.claude.json")
+            else { continue }
             usage.claude.append(summarize(account, now: now))
             sessions += recentSessions(account, now: now)
         }
@@ -92,7 +94,9 @@ final class AgentUsageReader {
         let others = (try? manager.contentsOfDirectory(atPath: home.path)) ?? []
         for name in others.sorted() where name.hasPrefix(".claude-") {
             let dir = home.appendingPathComponent(name)
-            if manager.fileExists(atPath: dir.appendingPathComponent("projects").path) { add(dir) }
+            // 써 본 계정(projects/) 또는 로그인만 한 계정(.claude.json)
+            if manager.fileExists(atPath: dir.appendingPathComponent("projects").path)
+                || manager.fileExists(atPath: dir.appendingPathComponent(".claude.json").path) { add(dir) }
         }
         if let custom = environment["CLAUDE_CONFIG_DIR"], !custom.isEmpty {
             add(URL(fileURLWithPath: (custom as NSString).expandingTildeInPath))

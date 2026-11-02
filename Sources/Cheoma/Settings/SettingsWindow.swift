@@ -307,6 +307,56 @@ private struct AgentSettings: View {
     }
 }
 
+// MARK: - 계정 추가
+
+/// 구독 계정 하나 더: 다음 번호 폴더 · alias를 만들고 Terminal에서 로그인한다 (Claude Code, Codex)
+private struct AddAccountSection: View {
+    @ObservedObject var agents: AgentStore
+    @State private var kind: AgentKind = .claude
+    /// 누를 때마다 바뀌는 폴더 상태를 다시 읽게
+    @State private var refresh = 0
+
+    var body: some View {
+        let kinds = [AgentKind.claude, .codex].filter { agents.installedAgents.contains($0) }
+        Section {
+            if kinds.isEmpty {
+                Text("계정을 나눌 수 있는 에이전트(Claude Code, Codex)가 설치돼 있지 않아요").foregroundStyle(.secondary)
+            } else {
+                Picker("에이전트", selection: $kind) {
+                    ForEach(kinds, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                if let plan = AccountSetup.plan(kinds.contains(kind) ? kind : kinds[0]) {
+                    let _ = refresh
+                    LabeledContent("새 폴더", value: AgentsStyle.abbreviated(plan.folder.path))
+                    LabeledContent(plan.aliasExists ? "터미널 명령 (이미 있음)" : "\(AgentsStyle.abbreviated(plan.shellFile.path))에 추가") {
+                        Text(plan.aliasExists ? plan.aliasName : plan.aliasLine)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                            .lineLimit(2)
+                    }
+                    LabeledContent("로그인") {
+                        Text(plan.kind == .claude ? "Terminal에서 Claude Code를 띄우면 로그인부터 해요" : "Terminal에서 codex login이 브라우저를 열어요")
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Spacer()
+                        Button("\(plan.kind.displayName) 계정 추가 (account\(plan.number))") {
+                            agents.addAccount(plan)
+                            refresh += 1
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            }
+        } header: {
+            Text("계정 추가")
+        } footer: {
+            Text("로그인하면 노치와 이 목록에 새 계정이 나와요. 셸 설정 파일은 끝에 한 줄만 붙이고 나머지는 그대로 둬요. Antigravity CLI(agy)는 로그인을 키체인에 둬서 폴더로 계정을 나눌 수 없어요.")
+        }
+    }
+}
+
 // MARK: - 계정
 
 private struct AccountSettings: View {
@@ -349,6 +399,7 @@ private struct AccountSettings: View {
             if agents.usage.claude.isEmpty && agents.usage.codex.isEmpty {
                 Text("로그인된 에이전트 계정을 찾지 못했어요").foregroundStyle(.secondary)
             }
+            AddAccountSection(agents: agents)
         }
         .formStyle(.grouped)
     }

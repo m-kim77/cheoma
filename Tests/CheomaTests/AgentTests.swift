@@ -526,3 +526,35 @@ final class AntigravityQuotaTests: XCTestCase {
         XCTAssertNil(AntigravityQuota.parse(Data("error: not logged in".utf8)))
     }
 }
+
+/// 계정 추가: 다음 번호, alias 한 줄 덧붙이기
+final class AccountSetupTests: XCTestCase {
+    func testPlanAndPrepare() throws {
+        let manager = FileManager.default
+        let home = manager.temporaryDirectory.appendingPathComponent("cheoma-accounts-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: home) }
+        try manager.createDirectory(at: home.appendingPathComponent(".claude-account2"), withIntermediateDirectories: true)
+        try "export A=1\nalias claude2='CLAUDE_CONFIG_DIR=~/.claude-account2 claude'".write(
+            to: home.appendingPathComponent(".zshrc"), atomically: true, encoding: .utf8)
+
+        let claude = try XCTUnwrap(AccountSetup.plan(.claude, home: home, shell: "/bin/zsh"))
+        XCTAssertEqual(claude.number, 3)
+        XCTAssertEqual(claude.aliasName, "claude3")
+        XCTAssertEqual(claude.aliasLine, "alias claude3='CLAUDE_CONFIG_DIR=\"$HOME/.claude-account3\" claude'")
+        XCTAssertFalse(claude.aliasExists)
+        XCTAssertTrue(claude.loginCommand.hasPrefix("CLAUDE_CONFIG_DIR='"))
+        try AccountSetup.prepare(claude)
+        XCTAssertTrue(manager.fileExists(atPath: home.appendingPathComponent(".claude-account3").path))
+        let rc = try String(contentsOf: home.appendingPathComponent(".zshrc"), encoding: .utf8)
+        XCTAssertTrue(rc.hasPrefix("export A=1\nalias claude2="))
+        XCTAssertTrue(rc.hasSuffix("\n\n# Cheoma: Claude Code 계정 account3\nalias claude3='CLAUDE_CONFIG_DIR=\"$HOME/.claude-account3\" claude'\n"))
+
+        // 다음은 4, Codex는 처음이라 2, bash는 .bashrc
+        XCTAssertEqual(AccountSetup.plan(.claude, home: home)?.number, 4)
+        let codex = try XCTUnwrap(AccountSetup.plan(.codex, home: home, shell: "/bin/bash"))
+        XCTAssertEqual(codex.number, 2)
+        XCTAssertEqual(codex.shellFile.lastPathComponent, ".bashrc")
+        XCTAssertTrue(codex.loginCommand.hasSuffix("codex login"))
+        XCTAssertNil(AccountSetup.plan(.antigravity, home: home))
+    }
+}
