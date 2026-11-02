@@ -18,7 +18,7 @@ enum AgentResume {
 
     /// 이 에이전트는 이어서 할 수 있다
     static func canResume(_ kind: AgentKind) -> Bool {
-        kind == .claude || kind == .codex
+        kind == .claude || kind == .codex || kind == .antigravity
     }
 
     /// 기본 설정 폴더(~/.claude)면 CLAUDE_CONFIG_DIR를 붙이지 않는다. 기본 계정의 로그인 정보는 ~/.claude.json에 있어서
@@ -50,6 +50,7 @@ enum AgentResume {
         let id = AgentCommandRunner.shellQuoted(target.sessionID)
         switch target.kind {
         case .codex: return "\(launchCommand(.codex, configDir: configDir ?? target.configDir, home: home)) resume \(id)"
+        case .antigravity: return "\(target.kind.command) --conversation \(id)"
         default: return "\(launchCommand(target.kind, configDir: configDir, home: home)) --resume \(id)"
         }
     }

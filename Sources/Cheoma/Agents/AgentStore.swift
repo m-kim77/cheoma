@@ -470,6 +470,20 @@ final class AgentStore: ObservableObject {
             }
             next[index].title = record?.title
         }
+        // Codex · Antigravity 프로세스는 세션 ID를 알려 주지 않는다 (Codex는 기록을 공유 데몬이 쓴다).
+        // 같은 폴더에서 그 프로세스가 시작된 뒤 움직인 기록이 그 세션이다. 같은 폴더에 같은 에이전트가 둘이면 고르지 않는다
+        for index in next.indices where next[index].sessionID == nil && (next[index].kind == .codex || next[index].kind == .antigravity) {
+            let session = next[index]
+            guard session.state != .exited, let cwd = session.cwd,
+                  next.filter({ $0.kind == session.kind && $0.cwd == cwd && $0.state != .exited }).count == 1 else { continue }
+            let started = session.startedAt ?? .distantPast
+            if let record = usage.recentSessions.first(where: {
+                $0.kind == session.kind && $0.cwd == cwd && $0.lastActivity >= started.addingTimeInterval(-5)
+            }) {
+                next[index].sessionID = record.id
+                next[index].title = next[index].title ?? record.title
+            }
+        }
 
         sessions = next.filter { !hiddenKinds.contains($0.kind) }.sorted(by: Self.order)
         recordedSessions = usage.recentSessions.filter { record in

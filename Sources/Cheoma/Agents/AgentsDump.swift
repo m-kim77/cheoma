@@ -81,7 +81,7 @@ enum AgentsDump {
         print("세션 \(store.sessions.count)개 (목록 순서대로)")
         for session in store.sessions {
             print("  \(session.id)  \(session.kind.rawValue)  \(session.account ?? "")  \(session.state.title)  \(session.projectName)"
-                  + "  · \(session.title ?? session.analysis?.summary ?? "-")")
+                  + "  · \(session.title ?? session.analysis?.summary ?? "-")" + (session.sessionID.map { "  [\($0.prefix(8))]" } ?? ""))
         }
         print("최근 기록 \(store.recordedSessions.count)개")
         for record in store.recordedSessions {

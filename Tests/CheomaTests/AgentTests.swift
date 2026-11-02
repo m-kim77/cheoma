@@ -525,6 +525,15 @@ final class AntigravityQuotaTests: XCTestCase {
         XCTAssertEqual(groups.map { AntigravityQuota.shortName($0.name) }, ["Gemini", "Claude · GPT"])
         XCTAssertNil(AntigravityQuota.parse(Data("error: not logged in".utf8)))
     }
+
+    func testConversationRecordFields() throws {
+        XCTAssertEqual(AntigravityRecords.workspace("[\"file:///Users/me/My%20App\"]"), "/Users/me/My App")
+        XCTAssertNil(AntigravityRecords.workspace("[]"))
+        XCTAssertEqual(AntigravityRecords.parseDate("2026-11-02 02:35:03.772847+00:00").map { Int($0.timeIntervalSince1970) }, 1_793_586_903)
+        XCTAssertNil(AntigravityRecords.parseDate("0001-01-01 00:00:00+00:00"))
+        let target = AgentResume.Target(kind: .antigravity, sessionID: "220f0db8", cwd: "/tmp", configDir: nil)
+        XCTAssertEqual(AgentResume.resumeCommand(target, configDir: nil), "agy --conversation '220f0db8'")
+    }
 }
 
 /// 계정 추가: 다음 번호, alias 한 줄 덧붙이기

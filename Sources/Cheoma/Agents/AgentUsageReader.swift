@@ -26,6 +26,9 @@ final class AgentUsageReader {
     // Codex (폴더마다)
     private var codexHomes: [String: CodexHome] = [:]
 
+    // Antigravity CLI 대화 목록 (DB · WAL 파일이 바뀌었을 때만 다시 읽는다)
+    private var antigravityRecords: (stamp: [JSONLFile.Stat?], records: [RecordedSession])?
+
     // 계정 파일 (바뀌었을 때만 다시 읽는다)
     private var accountFiles: [String: (stat: JSONLFile.Stat, claude: AgentAccounts.Claude?, codex: AgentAccounts.Codex?)] = [:]
 
@@ -69,12 +72,27 @@ final class AgentUsageReader {
         }
         codexHomes = codexHomes.filter { codexDirs.contains($0.key) }
 
+        sessions += readAntigravity(now: now)
+
         // 이어 한 Codex 세션은 기록 파일이 여러 개라 같은 세션이 두 번 나온다. 가장 최근 것만 남긴다
         var seen = Set<String>()
         let unique = sessions.sorted { $0.lastActivity > $1.lastActivity }.filter { seen.insert("\($0.kind.rawValue):\($0.id)").inserted }
         usage.recentSessions = Array(unique.prefix(Self.maxRecentSessions))
         usage.local = LocalModelReader.read()
         return usage
+    }
+
+    private func readAntigravity(now: Double) -> [RecordedSession] {
+        let path = AntigravityRecords.databasePath(home: home)
+        let stamp = [JSONLFile.stat(path), JSONLFile.stat(path + "-wal")]
+        guard stamp[0] != nil else { return [] }
+        let since = Date(timeIntervalSince1970: now - Self.recentWindow)
+        if let cached = antigravityRecords, cached.stamp == stamp {
+            return cached.records.filter { $0.lastActivity >= since }
+        }
+        let records = AntigravityRecords.read(path: path, since: since)
+        antigravityRecords = (stamp, records)
+        return records
     }
 
     // MARK: - 설정 폴더
