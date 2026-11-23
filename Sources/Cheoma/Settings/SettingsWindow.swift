@@ -11,35 +11,67 @@ final class SettingsWindowController {
     private let model: NotchModel
     private let agents: AgentStore
     private let updates: UpdateChecker
+    private let dictation: DictationController
     private let navigation = SettingsNavigation()
     private var window: NSWindow?
+    private var closeObserver: NSObjectProtocol?
+    /// 닫았다 다시 열어도 제자리에 뜨게 마지막 자리를 기억한다 (창은 닫을 때 놓는다)
+    private var lastOrigin: CGPoint?
 
-    init(model: NotchModel, agents: AgentStore, updates: UpdateChecker) {
+    init(model: NotchModel, agents: AgentStore, updates: UpdateChecker, dictation: DictationController) {
         self.model = model
         self.agents = agents
         self.updates = updates
+        self.dictation = dictation
     }
 
-    /// tab을 주면 그 탭으로 연다 (메뉴의 "새 버전 확인…" → 업데이트)
+    /// tab을 주면 그 탭으로 연다 (메뉴의 "업데이트 확인…" → 업데이트)
     func show(tab: SettingsView.Tab? = nil) {
         if let tab { navigation.tab = tab }
-        let window = self.window ?? makeWindow()
-        self.window = window
+        let window = loadWindow()
         agents.refreshNow()
         // 메뉴바 앱이라 앞으로 나오게 해야 창이 다른 앱 뒤에 숨지 않는다
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
     }
 
+    /// 창을 만들어 둔다 (이미 있으면 그대로). 띄우지는 않는다
+    func loadWindow() -> NSWindow {
+        if let window { return window }
+        let window = makeWindow()
+        self.window = window
+        return window
+    }
+
     private func makeWindow() -> NSWindow {
-        let hosting = NSHostingController(rootView: SettingsView(model: model, agents: agents, updates: updates, navigation: navigation))
+        let hosting = NSHostingController(rootView: SettingsView(model: model, agents: agents, updates: updates,
+                                                                 dictation: dictation, navigation: navigation))
         let window = NSWindow(contentViewController: hosting)
         window.title = "Cheoma 설정"
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.isReleasedWhenClosed = false
         window.setContentSize(CGSize(width: 560, height: 520))
-        window.center()
+        if let lastOrigin { window.setFrameOrigin(lastOrigin) } else { window.center() }
+        closeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.windowWillClose() }
+        }
         return window
+    }
+
+    /// 닫으면 창과 뷰를 놓는다. 들고 있으면 닫힌 창도 AgentStore가 바뀔 때마다 탭 네 개를 다시 계산하고,
+    /// 그때마다 Picker가 만든 객체가 쌓였다 (3초에 하나, 앱을 끌 때까지)
+    private func windowWillClose() {
+        if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
+        closeObserver = nil
+        guard let closing = window else { return }
+        lastOrigin = closing.frame.origin
+        window = nil
+        // 닫히는 중인 창의 내용은 다음 차례에 뗀다
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { closing.contentViewController = nil }
+        }
     }
 }
 
@@ -53,11 +85,13 @@ final class SettingsNavigation: ObservableObject {
 }
 
 struct SettingsView: View {
-    enum Tab: Hashable, CaseIterable { case general, agents, accounts, updates }
+    enum Tab: Hashable { case general, agents, accounts, dictation, updates }
 
     @ObservedObject var model: NotchModel
     @ObservedObject var agents: AgentStore
     let updates: UpdateChecker
+    /// 받아쓰기 탭만 지켜본다 (설정이 바뀔 때 다른 탭까지 다시 그리지 않게)
+    let dictation: DictationController
     @ObservedObject var navigation: SettingsNavigation
 
     var body: some View {
@@ -71,6 +105,9 @@ struct SettingsView: View {
             AccountSettings(agents: agents)
                 .tabItem { Label("계정", systemImage: "person.2") }
                 .tag(Tab.accounts)
+            DictationSettingsTab(dictation: dictation)
+                .tabItem { Label("받아쓰기", systemImage: "mic") }
+                .tag(Tab.dictation)
             UpdateSettings(updates: updates)
                 .tabItem { Label("업데이트", systemImage: "arrow.down.circle") }
                 .tag(Tab.updates)
@@ -93,33 +130,28 @@ private struct GeneralSettings: View {
                 Picker("펼친 모양", selection: $model.theme) {
                     ForEach(NotchTheme.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
-                Toggle("경고 알림 (과열 · 메모리 · 배터리)", isOn: $warnings)
+                Toggle("과열 · 메모리 · 배터리 경고", isOn: $warnings)
                     .onChange(of: warnings) { _, value in WarningAlerts.isEnabled = value }
             }
             Section("에이전트 탭") {
                 Picker("글자 크기", selection: $model.agentsTextScale) {
                     ForEach(AgentsTextScale.allCases, id: \.self) { Text("\($0.title) · \($0.percent)").tag($0) }
                 }
-                Picker("터미널 화면 글자", selection: $screenTextSize) {
+                Picker("터미널 글자 크기", selection: $screenTextSize) {
                     ForEach(AgentsScreenTextSize.steps, id: \.self) { Text(AgentsScreenTextSize.title($0)).tag($0) }
                 }
-                Text(screenTextSize == AgentsScreenTextSize.fit
-                     ? "맞춤: 가장 긴 줄이 들어가게 글자를 줄여요"
-                     : "폭을 넘는 줄은 다음 줄로 넘겨요. 미리보기 오른쪽 위 − + 로도 바꿔요")
-                    .foregroundStyle(.secondary)
-                LabeledContent("탭 크기", value: "\(Int(model.agentsSize.width)) × \(Int(model.agentsSize.height))")
-                HStack {
-                    Text("노치를 펼친 뒤 오른쪽 아래 모서리를 끌어서 바꿔요")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("기본 크기로") { model.resizeAgents(to: model.agentsMinimumSize) }
-                        .disabled(model.agentsSize == model.agentsMinimumSize)
+                LabeledContent("탭 크기") {
+                    HStack {
+                        Text("\(Int(model.agentsSize.width)) × \(Int(model.agentsSize.height))").monospacedDigit()
+                        Button("기본값으로") { model.resetAgentsSize() }
+                            .disabled(model.isAgentsSizeDefault)
+                    }
                 }
             }
             // 로그인 항목은 .app 번들로 실행할 때만 등록할 수 있다
             if Bundle.main.bundleIdentifier != nil {
                 Section("시작") {
-                    Toggle("로그인 시 자동 실행", isOn: $launchAtLogin)
+                    Toggle("로그인 시 열기", isOn: $launchAtLogin)
                         .onChange(of: launchAtLogin) { _, value in setLaunchAtLogin(value) }
                 }
             }
@@ -150,7 +182,7 @@ private struct UpdateSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle("새 버전 확인", isOn: $checksUpdates)
+                Toggle("자동으로 업데이트 확인", isOn: $checksUpdates)
                     .onChange(of: checksUpdates) { _, value in if value { updates.checkIfDue() } }
                 LabeledContent("현재 버전", value: updates.current?.description ?? "개발 빌드")
                 HStack {
@@ -161,26 +193,26 @@ private struct UpdateSettings: View {
                         .disabled(updates.isChecking || updates.current == nil)
                 }
             } footer: {
-                Text("켜 두면 앱을 켜고 조금 뒤 한 번, 그 뒤로 하루에 한 번 GitHub에서 최신 릴리스 정보만 받아 와요. 새 버전은 노치로 한 번 알려요.")
+                Text("하루에 한 번 GitHub에서 새 버전을 확인합니다.")
             }
             if let release = updates.available {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("바뀐 내용")
+                        Text("변경 사항")
                         Self.markdown(release.summary())
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     HStack {
-                        Text("릴리스 페이지에서 Cheoma.zip을 받아요").foregroundStyle(.secondary)
+                        Text("Cheoma.zip").foregroundStyle(.secondary)
                         Spacer()
-                        Button("받기") { NSWorkspace.shared.open(release.htmlURL) }
+                        Button("다운로드") { NSWorkspace.shared.open(release.htmlURL) }
                             .buttonStyle(.borderedProminent)
                     }
                 } header: {
                     Text("새 버전 \(release.version?.description ?? release.tagName)")
                 } footer: {
-                    Text("자동으로 설치하지는 않아요. 앱을 끄고, 받은 zip을 풀어 응용 프로그램 폴더의 Cheoma를 바꿔요.")
+                    Text("Cheoma를 종료한 후 응용 프로그램 폴더의 Cheoma를 새 버전으로 교체하십시오.")
                 }
             }
         }
@@ -188,12 +220,12 @@ private struct UpdateSettings: View {
     }
 
     private var updateStatus: String {
-        if updates.current == nil { return "개발 빌드는 확인하지 않아요" }
-        if updates.isChecking { return "확인하는 중…" }
-        if updates.lastCheckFailed { return "확인하지 못했어요 · 인터넷 연결을 봐 주세요" }
-        guard let checked = updates.lastChecked else { return "아직 확인하지 않았어요" }
+        if updates.current == nil { return "개발 빌드에서는 확인하지 않음" }
+        if updates.isChecking { return "확인 중…" }
+        if updates.lastCheckFailed { return "확인할 수 없음 · 인터넷 연결 확인 필요" }
+        guard let checked = updates.lastChecked else { return "확인 기록 없음" }
         let when = AgentsStyle.ago(checked)
-        return updates.available == nil ? "최신 버전이에요 · \(when) 확인" : "새 버전이 있어요 · \(when) 확인"
+        return updates.available == nil ? "최신 버전 · \(when) 확인" : "새 버전 있음 · \(when) 확인"
     }
 
     /// 굵게 · 링크 같은 줄 안의 마크다운만 그린다 (줄바꿈은 그대로)
@@ -213,7 +245,7 @@ private struct AgentSettings: View {
         Form {
             Section {
                 if agents.installedAgents.isEmpty {
-                    Text("설치된 에이전트를 찾지 못했어요").foregroundStyle(.secondary)
+                    Text("설치된 에이전트 없음").foregroundStyle(.secondary)
                 }
                 ForEach(shownKinds, id: \.self) { kind in
                     Toggle(isOn: Binding(get: { !agents.hiddenKinds.contains(kind) },
@@ -227,25 +259,25 @@ private struct AgentSettings: View {
                     }
                 }
             } header: {
-                Text("보이는 에이전트")
+                Text("표시할 에이전트")
             } footer: {
-                Text("끈 에이전트는 노치의 세션 목록 · 최근 기록 · 새 에이전트 · 사용량 · 알림에서 빠져요.")
+                Text("끈 에이전트는 노치에 표시되지 않습니다.")
             }
 
             Section {
                 LabeledContent("Terminal") {
                     switch agents.terminalPermission {
                     case .granted: Label("연결됨", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                    case .notDetermined: Button("Terminal 연결") { agents.requestTerminalAccess() }
-                    case .denied: Text("거절됨 · 시스템 설정 › 개인정보 보호 및 보안 › 자동화").foregroundStyle(.secondary)
-                    case .targetNotRunning: Text("Terminal을 켜면 연결할 수 있어요").foregroundStyle(.secondary)
+                    case .notDetermined: Button("연결…") { agents.requestTerminalAccess() }
+                    case .denied: Text("거부됨 · 개인정보 보호 및 보안 › 자동화").foregroundStyle(.secondary)
+                    case .targetNotRunning: Text("Terminal 실행 안 됨").foregroundStyle(.secondary)
                     }
                 }
-                LabeledContent("tmux", value: agents.isTmuxAvailable ? "있음 · 새 에이전트 · 이어서 하기에 써요" : "없음 (brew install tmux)")
+                LabeledContent("tmux", value: agents.isTmuxAvailable ? "설치됨" : "설치 안 됨 (brew install tmux)")
             } header: {
                 Text("터미널")
             } footer: {
-                Text("Terminal 탭의 화면을 읽고 답을 보내려면 Terminal 자동화 허락이 필요해요.")
+                Text("Terminal 탭을 읽고 입력하려면 자동화 권한이 필요합니다.")
             }
 
             Section {
@@ -260,24 +292,26 @@ private struct AgentSettings: View {
                 LabeledContent("Codex", value: codexStatus)
                 HStack {
                     Spacer()
-                    Button("연결 끊기") { agents.uninstallHooks() }
+                    Button("연결 해제") { agents.uninstallHooks() }
                         .disabled(!agents.hookStatus.claude.contains { $0.hooks } && agents.hookStatus.codex != .installed)
                     Button("모두 연결") { agents.installHooks() }
                         .disabled(agents.hookStatus.claude.allSatisfy(\.isInstalled) && agents.hookStatus.codex != .notInstalled)
                 }
             } header: {
-                Text("알림 연결 (훅)")
+                Text("알림 연결")
             } footer: {
-                Text("선택을 기다리거나 차례가 끝나면 노치로 바로 알려요. Claude Code는 상태 줄로 구독 한도도 받아요. 고치기 전의 설정 파일은 .cheoma-backup으로 남겨요.")
+                Text("에이전트가 입력을 기다리거나 작업을 마치면 노치에 알립니다. 기존 설정 파일은 .cheoma-backup으로 백업됩니다.")
             }
 
-            Section("사용량 표시") {
+            Section {
                 Picker("Claude 사용량", selection: $usageDisplay) {
                     ForEach(ClaudeUsageDisplay.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                Text(usageDisplay == .limits ? "구독의 5시간 · 주간 한도를 쓴 비율" : "쓴 토큰을 API 가격으로 셈한 값 · 구독이면 실제로 청구되지 않아요")
-                    .foregroundStyle(.secondary)
+            } header: {
+                Text("사용량 표시")
+            } footer: {
+                Text(usageDisplay == .limits ? "5시간 · 주간 한도 사용률" : "API 가격 환산 · 구독 요금제는 청구되지 않음")
             }
         }
         .formStyle(.grouped)
@@ -293,7 +327,7 @@ private struct AgentSettings: View {
         switch target.statusLine {
         case .installed: return "연결됨"
         case .notInstalled: return "알림만 연결됨"
-        case .occupied: return "연결됨 · 상태 줄은 다른 프로그램이 써요"
+        case .occupied: return "연결됨 · 상태 줄은 다른 프로그램이 사용 중"
         }
     }
 
@@ -301,7 +335,7 @@ private struct AgentSettings: View {
         switch agents.hookStatus.codex {
         case .installed: "연결됨"
         case .notInstalled: "연결 안 됨"
-        case .occupied(let program): "notify를 \(program)에서 써서 건드리지 않아요"
+        case .occupied(let program): "notify 사용 중: \(program)"
         case .unavailable: "설정 없음"
         }
     }
@@ -312,38 +346,36 @@ private struct AgentSettings: View {
 /// 구독 계정 하나 더: 다음 번호 폴더 · alias를 만들고 Terminal에서 로그인한다 (Claude Code, Codex)
 private struct AddAccountSection: View {
     @ObservedObject var agents: AgentStore
-    @State private var kind: AgentKind = .claude
-    /// 누를 때마다 바뀌는 폴더 상태를 다시 읽게
-    @State private var refresh = 0
+    let kinds: [AgentKind]
+    @Binding var kind: AgentKind
+    /// 다음 번호 · alias (AccountSettings가 읽어 둔 것)
+    let plan: AccountSetup.Plan?
 
     var body: some View {
-        let kinds = [AgentKind.claude, .codex].filter { agents.installedAgents.contains($0) }
         Section {
             if kinds.isEmpty {
-                Text("계정을 나눌 수 있는 에이전트(Claude Code, Codex)가 설치돼 있지 않아요").foregroundStyle(.secondary)
+                Text("Claude Code 또는 Codex가 설치되어 있지 않음").foregroundStyle(.secondary)
             } else {
                 Picker("에이전트", selection: $kind) {
                     ForEach(kinds, id: \.self) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                if let plan = AccountSetup.plan(kinds.contains(kind) ? kind : kinds[0]) {
-                    let _ = refresh
+                if let plan {
                     LabeledContent("새 폴더", value: AgentsStyle.abbreviated(plan.folder.path))
-                    LabeledContent(plan.aliasExists ? "터미널 명령 (이미 있음)" : "\(AgentsStyle.abbreviated(plan.shellFile.path))에 추가") {
+                    LabeledContent(plan.aliasExists ? "터미널 명령" : "\(AgentsStyle.abbreviated(plan.shellFile.path))에 추가") {
                         Text(plan.aliasExists ? plan.aliasName : plan.aliasLine)
                             .font(.system(.body, design: .monospaced))
                             .textSelection(.enabled)
                             .lineLimit(2)
                     }
                     LabeledContent("로그인") {
-                        Text(plan.kind == .claude ? "Terminal에서 Claude Code를 띄우면 로그인부터 해요" : "Terminal에서 codex login이 브라우저를 열어요")
+                        Text(plan.kind == .claude ? "Terminal에서 Claude Code 로그인" : "Terminal에서 codex login 실행")
                             .foregroundStyle(.secondary)
                     }
                     HStack {
                         Spacer()
                         Button("\(plan.kind.displayName) 계정 추가 (account\(plan.number))") {
                             agents.addAccount(plan)
-                            refresh += 1
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -352,7 +384,7 @@ private struct AddAccountSection: View {
         } header: {
             Text("계정 추가")
         } footer: {
-            Text("로그인하면 노치와 이 목록에 새 계정이 나와요. 셸 설정 파일은 끝에 한 줄만 붙이고 나머지는 그대로 둬요. Antigravity CLI(agy)는 로그인을 키체인에 둬서 폴더로 계정을 나눌 수 없어요.")
+            Text("셸 설정 파일 끝에 한 줄을 추가합니다.")
         }
     }
 }
@@ -361,6 +393,23 @@ private struct AddAccountSection: View {
 
 private struct AccountSettings: View {
     @ObservedObject var agents: AgentStore
+    @State private var addKind: AgentKind = .claude
+    /// 계정 추가의 다음 번호 · alias. 홈 폴더와 셸 설정 파일을 읽어 정하므로 그릴 때마다 읽지 않고 바뀔 만한 때만 다시 읽는다
+    @State private var addPlan: AccountSetup.Plan?
+
+    /// 폴더로 계정을 나눌 수 있고 설치된 에이전트
+    private var addKinds: [AgentKind] {
+        [AgentKind.claude, .codex].filter { agents.installedAgents.contains($0) }
+    }
+
+    /// 고른 에이전트가 설치돼 있지 않으면 첫 번째
+    private var shownAddKind: AgentKind? {
+        addKinds.contains(addKind) ? addKind : addKinds.first
+    }
+
+    private func reloadAddPlan() {
+        addPlan = shownAddKind.flatMap { AccountSetup.plan($0) }
+    }
 
     var body: some View {
         Form {
@@ -369,7 +418,7 @@ private struct AccountSettings: View {
                     LabeledContent("이메일", value: account.email ?? "-")
                     LabeledContent("요금제", value: account.plan ?? "-")
                     limits(account.limits, updatedAt: account.limitsUpdatedAt)
-                    LabeledContent("도는 세션", value: "\(agents.sessions.filter { $0.account == account.account && $0.state != .exited }.count)개")
+                    LabeledContent("실행 중인 세션", value: "\(agents.sessions.filter { $0.account == account.account && $0.state != .exited }.count)개")
                     LabeledContent("설정 폴더", value: AgentsStyle.abbreviated(account.configDir))
                     LabeledContent("실행 명령") {
                         Text(AgentResume.launchCommand(.claude, configDir: account.configDir))
@@ -397,17 +446,21 @@ private struct AccountSettings: View {
                 }
             }
             if agents.usage.claude.isEmpty && agents.usage.codex.isEmpty {
-                Text("로그인된 에이전트 계정을 찾지 못했어요").foregroundStyle(.secondary)
+                Text("로그인된 계정 없음").foregroundStyle(.secondary)
             }
-            AddAccountSection(agents: agents)
+            AddAccountSection(agents: agents, kinds: addKinds, kind: $addKind, plan: addPlan)
         }
         .formStyle(.grouped)
+        .onAppear { reloadAddPlan() }
+        .onChange(of: shownAddKind) { reloadAddPlan() }
+        // 계정 추가가 끝나면(폴더 · alias가 생기면) 알림이 뜬다: 그때 다음 번호로 넘어간다
+        .onChange(of: agents.message) { reloadAddPlan() }
     }
 
     @ViewBuilder
     private func limits(_ windows: [UsageWindow], updatedAt: Date?) -> some View {
         if windows.isEmpty {
-            LabeledContent("한도", value: "아직 정보 없음")
+            LabeledContent("한도", value: "정보 없음")
         }
         ForEach(windows, id: \.windowMinutes) { window in
             let isReset = window.resetsAt.map { $0 <= Date() } ?? false
@@ -427,7 +480,7 @@ private struct AccountSettings: View {
             }
         }
         if let updatedAt, !windows.isEmpty {
-            LabeledContent("받은 때", value: AgentsStyle.ago(updatedAt))
+            LabeledContent("마지막 업데이트", value: AgentsStyle.ago(updatedAt))
         }
     }
 }

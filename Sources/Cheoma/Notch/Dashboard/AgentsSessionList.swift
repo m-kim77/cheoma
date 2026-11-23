@@ -25,7 +25,7 @@ struct AgentsSessionList: View {
     private func rows(now: Date) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             if sessions.isEmpty {
-                Text("실행 중인 에이전트가 없어요")
+                Text("실행 중인 에이전트 없음")
                     .agentsFont(size: 11)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
@@ -36,7 +36,7 @@ struct AgentsSessionList: View {
                     .onTapGesture { onSelect(session.id) }
             }
             if !recorded.isEmpty {
-                Text("최근 기록 · 눌러서 이어서 하기")
+                Text("최근 기록")
                     .agentsFont(size: 9.5, weight: .semibold)
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 6)
@@ -105,7 +105,7 @@ private struct SessionRow: View {
         let where_: String = switch session.location {
         case .terminalApp: "터미널"
         case .tmux: "tmux"
-        case .other(_, let app): app ?? "보기만"
+        case .other(_, let app): app ?? "읽기 전용"
         }
         guard let account = session.account, account != ".claude" else { return where_ }
         return "\(where_) · \(AgentsStyle.accountName(account))"
@@ -154,7 +154,7 @@ private struct RecordedRow: View {
         var lines = [text]
         if let message = record.lastMessage { lines.append(message) }
         if let cost = record.costUSD { lines.append("비용 \(AgentsStyle.cost(cost))") }
-        lines.append("누르면 이어서 할 수 있어요")
+        lines.append("클릭하여 이어서 하기")
         return lines.joined(separator: "\n")
     }
 }

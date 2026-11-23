@@ -26,6 +26,11 @@
     <!-- Terminal 자동화 권한을 물을 때 macOS가 보여주는 설명 -->
     <key>NSAppleEventsUsageDescription</key>
     <string>Terminal에서 도는 코드 에이전트의 화면을 노치에 보여 주고, 노치에서 입력한 답을 그 탭으로 보내려면 필요해요.</string>
+    <!-- 받아쓰기: 마이크 · 음성 인식 권한을 물을 때 macOS가 보여주는 설명 -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>받아쓰기 단축키를 누르고 있는 동안 말소리를 듣고, 글로 옮겨 쓰던 앱에 붙여 넣으려면 마이크가 필요해요. 들은 소리는 글로 옮긴 뒤 바로 버려요.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>받아쓰기에서 Apple 음성 인식으로 말소리를 글로 옮기려면 필요해요. 인식은 이 Mac 안에서 하고 소리를 밖으로 보내지 않아요.</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 m-kim77. GPL-3.0 License.</string>
     <key>NSHighResolutionCapable</key>

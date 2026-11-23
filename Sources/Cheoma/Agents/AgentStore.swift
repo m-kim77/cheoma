@@ -6,7 +6,6 @@ struct AgentSession: Identifiable, Equatable, Sendable {
     /// 위치로 정한 ID ("terminal:/dev/ttys004", "tmux:%3")
     var id: String
     var kind: AgentKind
-    var pid: pid_t
     var location: TerminalLocation
     var cwd: String?
     /// Claude의 ai-title, 터미널 탭 제목 등
@@ -172,7 +171,7 @@ final class AgentStore: ObservableObject {
     func send(key: TerminalKey, to id: AgentSession.ID) {
         guard let session = session(id) else { return }
         guard session.location.canSendKeys else {
-            show(message: "이 세션에는 특수 키를 보낼 수 없어요. tmux 세션에서는 돼요")
+            show(message: "특수 키는 tmux 세션에서만 지원")
             return
         }
         perform(on: session) { bridge, location in
@@ -191,7 +190,7 @@ final class AgentStore: ObservableObject {
         }
         // 번호 없는 목록: 커서에서 고른 줄까지 화살표로 옮긴 뒤 Enter (tmux만)
         guard session.location.canSendKeys else {
-            show(message: "이 목록은 화살표로 골라야 해서 터미널에서 직접 골라 주세요")
+            show(message: "이 목록은 터미널에서 직접 선택해야 함")
             return
         }
         let choices = session.analysis?.choices ?? []
@@ -232,14 +231,14 @@ final class AgentStore: ObservableObject {
             do {
                 try AccountSetup.prepare(plan)
                 try TerminalAppBridge.shared.openTab(command: plan.loginCommand, in: nil)
-                let note = plan.aliasExists ? "" : " · 새 터미널부터 \(plan.aliasName)로 실행돼요"
+                let note = plan.aliasExists ? "" : " · 새 터미널에서 \(plan.aliasName) 사용 가능"
                 DispatchQueue.main.async { [weak self] in
-                    MainActor.assumeIsolated { self?.show(message: "Terminal에서 로그인해 주세요\(note)") }
+                    MainActor.assumeIsolated { self?.show(message: "Terminal에서 로그인하십시오\(note)") }
                 }
             } catch {
                 let text = (error as? AgentBridgeError)?.message ?? error.localizedDescription
                 DispatchQueue.main.async { [weak self] in
-                    MainActor.assumeIsolated { self?.show(message: "계정을 추가하지 못했어요: \(text) · 직접 실행: \(plan.loginCommand)") }
+                    MainActor.assumeIsolated { self?.show(message: "계정 추가 실패: \(text) · 직접 실행: \(plan.loginCommand)") }
                 }
             }
         }
@@ -258,7 +257,7 @@ final class AgentStore: ObservableObject {
     private func start(_ kind: AgentKind, command: String, in folder: String,
                        before: @escaping @Sendable () throws -> Void = {}) {
         guard isTmuxAvailable else {
-            show(message: "tmux가 필요해요 (brew install tmux)")
+            show(message: "tmux 필요 (brew install tmux)")
             return
         }
         queue.async {
@@ -296,8 +295,8 @@ final class AgentStore: ObservableObject {
                     self.terminalPermission = permission
                     switch permission {
                     case .granted: self.poll()
-                    case .denied: self.show(message: "시스템 설정 › 개인정보 보호 및 보안 › 자동화에서 Cheoma의 Terminal을 켜 주세요")
-                    case .targetNotRunning: self.show(message: "Terminal이 켜져 있을 때 연결할 수 있어요")
+                    case .denied: self.show(message: "시스템 설정 › 개인정보 보호 및 보안 › 자동화에서 Cheoma의 Terminal을 허용하십시오.")
+                    case .targetNotRunning: self.show(message: "Terminal이 실행 중이 아님")
                     case .notDetermined: break
                     }
                 }
@@ -317,7 +316,7 @@ final class AgentStore: ObservableObject {
                 try HookInstaller.installCodex()
                 done.append("Codex")
             }
-            return done.isEmpty ? "이미 연결돼 있어요" : "\(done.joined(separator: ", ")) 연결했어요"
+            return done.isEmpty ? "이미 연결됨" : "\(done.joined(separator: ", ")) 연결됨"
         }
     }
 
@@ -328,7 +327,7 @@ final class AgentStore: ObservableObject {
                 try HookInstaller.uninstallClaude(configDir: target.configDir)
             }
             if status.codex == .installed { try HookInstaller.uninstallCodex() }
-            return "훅을 뺐어요"
+            return "연결 해제됨"
         }
     }
 
@@ -344,6 +343,8 @@ final class AgentStore: ObservableObject {
         tickCount += 1
         // 탭을 보고 있으면 매초, 아니면 3초마다 (알림을 놓치지 않을 만큼만)
         if isVisible || tickCount % 3 == 0 { poll() }
+        // 바뀐 게 없으면 발행하지 않으므로(apply), "5분 전" · "40분 뒤" 같은 글자가 멈추지 않게 가끔은 다시 그리게 한다
+        if tickCount % 30 == 0 { objectWillChange.send() }
         if !pendingEvents.isEmpty { pendingEvents.removeAll { Date().timeIntervalSince($0.date) > 10 } }
     }
 
@@ -400,9 +401,10 @@ final class AgentStore: ObservableObject {
         }
     }
 
-    private func apply(_ result: PollResult) {
-        if let permission = result.permission { terminalPermission = permission }
-        if let usage = result.usage { self.usage = usage }
+    /// @Published는 같은 값을 넣어도 뷰를 다시 그리게 하므로, 바뀐 것만 넣는다 (닫혀 있을 때 3초, 탭을 볼 때 1초마다 불린다)
+    func apply(_ result: PollResult) {
+        if let permission = result.permission, permission != terminalPermission { terminalPermission = permission }
+        if let usage = result.usage, usage != self.usage { self.usage = usage }
         if let error = result.error { show(message: error) }
 
         var next: [AgentSession] = []
@@ -411,12 +413,11 @@ final class AgentStore: ObservableObject {
             seen.insert(item.id)
             exitedAt[item.id] = nil
             var session = sessions.first { $0.id == item.id } ?? AgentSession(
-                id: item.id, kind: item.kind, pid: item.pid, location: item.location, cwd: item.cwd, title: nil,
+                id: item.id, kind: item.kind, location: item.location, cwd: item.cwd, title: nil,
                 startedAt: item.startedAt, state: .unknown, stateSince: result.date, analysis: nil, screen: nil,
                 lastEvent: nil, isLaunchedByCheoma: item.isLaunchedByCheoma,
                 lastActivity: [item.lastOutput, item.statusSince, item.startedAt].compactMap { $0 }.max() ?? result.date)
             session.kind = item.kind
-            session.pid = item.pid
             session.location = item.location
             session.cwd = item.cwd ?? session.cwd
             session.startedAt = item.startedAt ?? session.startedAt
@@ -424,7 +425,7 @@ final class AgentStore: ObservableObject {
             session.sessionID = item.sessionID ?? session.sessionID
             session.account = item.account ?? session.account
             if let screen = item.screen {
-                session.screen = screen
+                if session.screen != screen { session.screen = screen }
                 session.analysis = item.analysis
                 lastCaptured[item.id] = result.date
             }
@@ -485,12 +486,14 @@ final class AgentStore: ObservableObject {
             }
         }
 
-        sessions = next.filter { !hiddenKinds.contains($0.kind) }.sorted(by: Self.order)
-        recordedSessions = usage.recentSessions.filter { record in
+        let shown = next.filter { !hiddenKinds.contains($0.kind) }.sorted(by: Self.order)
+        if shown != sessions { sessions = shown }
+        let recorded = usage.recentSessions.filter { record in
             !hiddenKinds.contains(record.kind) && !sessions.contains { session in
                 session.sessionID == record.id || (session.kind == record.kind && session.cwd == record.cwd && session.state != .exited)
             }
         }
+        if recorded != recordedSessions { recordedSessions = recorded }
         updateRecentFolders()
 
         if let paneID = launchedPaneID, sessions.contains(where: { $0.id == "tmux:\(paneID)" }) {
@@ -498,7 +501,8 @@ final class AgentStore: ObservableObject {
             launchedPaneID = nil
         }
         // 고른 세션은 목록 순서가 바뀌어도 그대로 둔다 (답을 쓰는 중에 다른 세션으로 바뀌지 않게)
-        if launchedPaneID == nil, selectedID.map({ id in !sessions.contains { $0.id == id } }) ?? true {
+        if launchedPaneID == nil, selectedID.map({ id in !sessions.contains { $0.id == id } }) ?? true,
+           selectedID != sessions.first?.id {
             selectedID = sessions.first?.id
         }
     }
@@ -526,7 +530,7 @@ final class AgentStore: ObservableObject {
             }
         }
         // 이번에 읽은 화면이 가장 정확하다
-        if item.screen != nil, let analysis = item.analysis, analysis.state != .unknown, analysis.state != .exited {
+        if item.screen != nil, let analysis = item.analysis, analysis.state != .unknown {
             return analysis.state
         }
         if item.isActive { return .working }
@@ -585,7 +589,7 @@ final class AgentStore: ObservableObject {
         if hiddenKinds.contains(session.kind) { return }
         let alert = state == .needsChoice
             ? NotchAlert(symbol: "hand.raised.fill", tint: .orange, text: "\(session.kind.shortName) 확인 필요")
-            : NotchAlert(symbol: "checkmark.circle.fill", tint: .green, text: "\(session.kind.shortName) 끝났어요")
+            : NotchAlert(symbol: "checkmark.circle.fill", tint: .green, text: "\(session.kind.shortName) 완료")
         if let last = lastAlert[session.id], last.state == state, date.timeIntervalSince(last.date) < Self.alertCooldown { return }
         lastAlert[session.id] = (state, date)
         onAlert?(alert, session.id)
@@ -636,11 +640,11 @@ final class AgentStore: ObservableObject {
                          _ work: @escaping @Sendable (TerminalBridge, TerminalLocation) throws -> Void) {
         let location = session.location
         guard let bridge = Self.bridge(for: location) else {
-            show(message: "이 세션은 보기만 할 수 있어요. 답은 그 앱에서 해 주세요")
+            show(message: "읽기 전용 세션 · 해당 앱에서 직접 입력")
             return
         }
         if case .terminalApp = location, terminalPermission != .granted, refresh {
-            show(message: "먼저 Terminal을 연결해 주세요")
+            show(message: "Terminal 연결 필요")
             return
         }
         let id = session.id
@@ -768,10 +772,10 @@ final class AgentStore: ObservableObject {
         var readUsage: Bool
     }
 
-    private struct PollItem {
+    /// (테스트에서 apply에 넣어 보려고 private이 아니다)
+    struct PollItem {
         var id: AgentSession.ID
         var kind: AgentKind
-        var pid: pid_t
         var location: TerminalLocation
         var cwd: String?
         var startedAt: Date?
@@ -789,7 +793,7 @@ final class AgentStore: ObservableObject {
         var analysis: ScreenAnalysis?
     }
 
-    private struct PollResult {
+    struct PollResult {
         var date: Date
         var items: [PollItem]
         var usage: AgentUsage?
@@ -825,7 +829,7 @@ final class AgentStore: ObservableObject {
             let lastOutput = AgentScanner.lastOutput(tty: tty)
             let live = process.kind == .claude ? ClaudeStatusLine.liveSession(pid: process.pid, configDirs: claudeDirs) : nil
             items.append(PollItem(
-                id: id, kind: process.kind, pid: process.pid, location: location, cwd: process.cwd,
+                id: id, kind: process.kind, location: location, cwd: process.cwd,
                 startedAt: process.startedAt, isLaunchedByCheoma: pane?.sessionName.hasPrefix(TmuxBridge.sessionPrefix) ?? false,
                 hasAgentProcess: true, isActive: lastOutput.map { now.timeIntervalSince($0) < activeWindow } ?? false,
                 lastOutput: lastOutput, sessionID: live?.sessionID, account: live?.account,
@@ -835,7 +839,7 @@ final class AgentStore: ObservableObject {
         for pane in panes where pane.sessionName.hasPrefix(TmuxBridge.sessionPrefix) && !items.contains(where: { $0.location.tty == pane.tty }) {
             let kind = AgentKind.allCases.first { pane.sessionName.hasPrefix("\(TmuxBridge.sessionPrefix)\($0.rawValue)") } ?? .claude
             items.append(PollItem(
-                id: "tmux:\(pane.paneID)", kind: kind, pid: pane.pid, location: .tmux(paneID: pane.paneID, tty: pane.tty),
+                id: "tmux:\(pane.paneID)", kind: kind, location: .tmux(paneID: pane.paneID, tty: pane.tty),
                 cwd: pane.currentPath, startedAt: nil, isLaunchedByCheoma: true, hasAgentProcess: false, isActive: false))
         }
 
@@ -923,7 +927,7 @@ extension AgentStore {
         """
         store.sessions = [
             AgentSession(
-                id: "terminal:/dev/ttys004", kind: .claude, pid: 4101,
+                id: "terminal:/dev/ttys004", kind: .claude,
                 location: .terminalApp(tty: "/dev/ttys004"),
                 cwd: "/Users/me/Documents/menu_bar", title: "Agents tab for the notch",
                 startedAt: now.addingTimeInterval(-3_100), state: .needsChoice, stateSince: now.addingTimeInterval(-95),
@@ -935,23 +939,23 @@ extension AgentStore {
                         AgentChoice(key: "3", label: "No, and tell Claude what to do differently", isHighlighted: false),
                     ],
                     summary: "Bash command: git push origin agents"),
-                screen: TerminalScreen(text: claudeScreen, capturedAt: now),
+                screen: TerminalScreen(text: claudeScreen),
                 lastEvent: nil, isLaunchedByCheoma: false),
             AgentSession(
-                id: "tmux:%3", kind: .codex, pid: 5202,
+                id: "tmux:%3", kind: .codex,
                 location: .tmux(paneID: "%3", tty: "/dev/ttys007"),
                 cwd: "/Users/me/Documents/shop-app", title: nil,
                 startedAt: now.addingTimeInterval(-720), state: .working, stateSince: now.addingTimeInterval(-42),
                 analysis: ScreenAnalysis(state: .working, question: nil, choices: [], summary: "Working (42s • esc to interrupt)"),
-                screen: TerminalScreen(text: codexScreen, capturedAt: now),
+                screen: TerminalScreen(text: codexScreen),
                 lastEvent: nil, isLaunchedByCheoma: true),
             AgentSession(
-                id: "tmux:%5", kind: .pi, pid: 6303,
+                id: "tmux:%5", kind: .pi,
                 location: .tmux(paneID: "%5", tty: "/dev/ttys009"),
                 cwd: "/Users/me/notes", title: nil,
                 startedAt: now.addingTimeInterval(-4_000), state: .needsInput, stateSince: now.addingTimeInterval(-600),
                 analysis: ScreenAnalysis(state: .needsInput, question: nil, choices: [], summary: "Done. Summarized 12 notes into weekly.md"),
-                screen: TerminalScreen(text: piScreen, capturedAt: now),
+                screen: TerminalScreen(text: piScreen),
                 lastEvent: nil, isLaunchedByCheoma: true),
         ]
         store.sessions = store.sessions.map { session in
@@ -978,12 +982,12 @@ extension AgentStore {
                             blockStartedAt: now.addingTimeInterval(-2 * 3_600), blockEndsAt: now.addingTimeInterval(3 * 3_600),
                             limits: [UsageWindow(usedPercent: 12, windowMinutes: 300, resetsAt: now.addingTimeInterval(2 * 3_600)),
                                      UsageWindow(usedPercent: 68, windowMinutes: 10_080, resetsAt: now.addingTimeInterval(3 * 86_400))],
-                            updatedAt: now, limitsUpdatedAt: now, configDir: "/Users/me/.claude", email: "me@example.com", plan: "Max 20x"),
+                            limitsUpdatedAt: now, configDir: "/Users/me/.claude", email: "me@example.com", plan: "Max 20x"),
                 ClaudeUsage(account: ".claude-account2", todayCostUSD: 12.4, todayTokens: 5_800_000, blockCostUSD: 4.7,
                             blockStartedAt: now.addingTimeInterval(-3_600), blockEndsAt: now.addingTimeInterval(4 * 3_600),
                             limits: [UsageWindow(usedPercent: 91, windowMinutes: 300, resetsAt: now.addingTimeInterval(40 * 60)),
                                      UsageWindow(usedPercent: 35, windowMinutes: 10_080, resetsAt: now.addingTimeInterval(5 * 86_400))],
-                            updatedAt: now, limitsUpdatedAt: now, configDir: "/Users/me/.claude-account2", email: "me@work.example", plan: "Max 5x"),
+                            limitsUpdatedAt: now, configDir: "/Users/me/.claude-account2", email: "me@work.example", plan: "Max 5x"),
             ],
             recentSessions: store.recordedSessions)
         store.hookStatus = HookInstaller.Status(

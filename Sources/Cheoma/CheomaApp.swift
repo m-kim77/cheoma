@@ -42,6 +42,10 @@ enum CheomaApp {
             Benchmark.run(seconds: seconds, only: rest.dropFirst().first.flatMap(DashboardTab.init))
             return
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--dictation-test") {
+            DictationTestCommand.run(arguments: Array(CommandLine.arguments[(index + 1)...]))
+            return
+        }
         #if DEBUG
         if CommandLine.arguments.contains("--click-test") {
             ClickTest.run()

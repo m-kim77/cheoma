@@ -282,12 +282,10 @@ final class AgentUsageReader {
             lastTime = record.time
         }
         var usage = ClaudeUsage(account: URL(fileURLWithPath: account.dir).lastPathComponent, todayCostUSD: todayCost, todayTokens: todayTokens,
-                                blockCostUSD: 0, blockStartedAt: nil, blockEndsAt: nil,
-                                updatedAt: account.records.last.map { Date(timeIntervalSince1970: $0.time) })
+                                blockCostUSD: 0, blockStartedAt: nil, blockEndsAt: nil)
         usage.configDir = account.dir
         let info = claudeAccount(configDir: account.dir)
         usage.email = info?.email
-        usage.displayName = info?.displayName
         usage.plan = info?.plan
         // 한도는 Cheoma 상태 줄이 받은 값과 Claude Code가 받아 둔 값 중 새것
         if let limits = ClaudeStatusLine.load(account: usage.account, home: URL(fileURLWithPath: home)) {

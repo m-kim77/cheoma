@@ -88,9 +88,6 @@ enum AgentState: String, Codable, Sendable {
         case .unknown: "확인 중"
         }
     }
-
-    /// 사용자가 뭔가 해 줘야 하는 상태
-    var needsAttention: Bool { self == .needsChoice || self == .needsInput }
 }
 
 /// 화면에서 읽은 선택지 하나
@@ -109,7 +106,6 @@ struct AgentChoice: Hashable, Sendable {
 struct TerminalScreen: Equatable, Sendable {
     /// 화면에 보이는 줄들을 줄바꿈으로 이은 것. tmux에서 읽으면 ANSI 색 코드가 들어 있고, Terminal.app은 글자만 있다
     var text: String
-    var capturedAt: Date
 }
 
 /// 화면을 보고 판단한 결과 (AgentScreenParser)
@@ -124,7 +120,7 @@ struct ScreenAnalysis: Equatable, Sendable {
 }
 
 /// 특수 키 (tmux로만 보낼 수 있다)
-enum TerminalKey: String, CaseIterable, Sendable {
+enum TerminalKey: String, Sendable {
     case enter, escape, tab, up, down, left, right, backspace, ctrlC
 }
 
@@ -191,14 +187,12 @@ struct ClaudeUsage: Equatable, Sendable {
     var blockEndsAt: Date?
     /// 구독의 5시간 · 주간 한도 (Cheoma 상태 줄이 받아 둔 값). 상태 줄을 연결하지 않았거나 아직 요청이 없었으면 비어 있다
     var limits: [UsageWindow] = []
-    var updatedAt: Date?
     /// limits를 받은 시각 (그 계정으로 Claude Code를 마지막으로 쓴 때)
     var limitsUpdatedAt: Date?
     /// 설정 폴더 전체 경로 (이 계정으로 실행할 때 CLAUDE_CONFIG_DIR)
     var configDir: String = ""
     /// 로그인한 계정 (.claude.json의 oauthAccount)
     var email: String?
-    var displayName: String?
     /// "Max 20x" …
     var plan: String?
 }

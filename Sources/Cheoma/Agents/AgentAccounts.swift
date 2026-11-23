@@ -7,7 +7,6 @@ import Foundation
 enum AgentAccounts {
     struct Claude: Equatable, Sendable {
         var email: String?
-        var displayName: String?
         /// "Max 20x", "Pro" …
         var plan: String?
         /// Claude Code가 마지막으로 받아 둔 한도와 받은 시각
@@ -28,9 +27,7 @@ enum AgentAccounts {
     static func claude(json data: Data) -> Claude? {
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let oauth = object["oauthAccount"] as? [String: Any] else { return nil }
-        var account = Claude(email: oauth["emailAddress"] as? String,
-                             displayName: (oauth["displayName"] as? String).flatMap { $0.isEmpty ? nil : $0 },
-                             plan: planName(oauth))
+        var account = Claude(email: oauth["emailAddress"] as? String, plan: planName(oauth))
         if let cached = object["cachedUsageUtilization"] as? [String: Any],
            let utilization = cached["utilization"] as? [String: Any] {
             account.limits = [("five_hour", 300), ("seven_day", 10_080)].compactMap { key, minutes in

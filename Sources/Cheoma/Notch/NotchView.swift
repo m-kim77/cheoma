@@ -20,6 +20,7 @@ struct NotchView: View {
         .environment(\.agentsScale, model.agentsTextScale.rawValue)
         .animation(Self.spring, value: model.phase)
         .animation(Self.spring, value: model.alert)
+        .animation(Self.spring, value: model.dictation)
         .animation(Self.spring, value: model.tab)
     }
 
@@ -37,6 +38,23 @@ struct NotchView: View {
             .frame(width: content.width, height: content.height, alignment: .top)
             .padding(.top, Gwanghwamun.contentTop(content: content))
             .transition(Self.dashboardTransition)
+        // 지붕 위로는 흰 글이 안 보이니 귀 모양의 검은 바탕을 깐다
+        if let dictation = model.dictation {
+            NotchShape.alert.fill(Color.black)
+                .frame(width: dictationBandWidth, height: model.notchSize.height)
+                .overlay { dictationEars(dictation) }
+                .transition(.opacity)
+        }
+    }
+
+    /// 펼친 대시보드에서도 받아쓰기 귀를 카메라 양옆 띠에 띄운다 (듣는 중인지 · 옮긴 결과가 보이게)
+    private var dictationBandWidth: CGFloat {
+        model.notchSize.width + NotchModel.dictationEarWidth * 2
+    }
+
+    private func dictationEars(_ dictation: DictationIndicator) -> some View {
+        DictationEars(indicator: dictation, live: model.dictationLive, notchWidth: model.notchSize.width)
+            .frame(width: dictationBandWidth, height: model.notchSize.height)
     }
 
     /// 기본 테마, 그리고 모든 테마의 닫힘·마우스 가까이·알림
@@ -45,7 +63,7 @@ struct NotchView: View {
         let size = model.shapeSize
         let shape: NotchShape = switch model.phase {
         case .open: .open
-        case .alert: .alert
+        case .alert, .dictation: .alert
         case .closed, .hovering: .closed
         }
 
@@ -56,6 +74,14 @@ struct NotchView: View {
             .overlay(alignment: .top) {
                 content
                     .frame(width: targetSize.width, height: targetSize.height, alignment: .top)
+            }
+            // 받아쓰기 귀는 닫힌 모양 · 펼친 대시보드에서 한 뷰로 그린다 (펼치거나 닫을 때 깜빡이거나 움직이지 않게).
+            // 받아쓰는 중이면 단계는 늘 dictation이나 open이다
+            .overlay(alignment: .top) {
+                if let dictation = model.dictation {
+                    dictationEars(dictation)
+                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                }
             }
             .clipShape(shape)
             // 그림자는 검은 모양에만 단다. 내용 전체에 달면 그래프가 바뀔 때마다 창 전체 그림자를 다시 계산해서 CPU를 많이 쓴다
@@ -87,10 +113,11 @@ struct NotchView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.6)))
             }
         case .open:
+            // 대시보드 위쪽의 빈 띠(카메라 양옆)에는 basic이 받아쓰기 귀를 띄운다
             DashboardView(topInset: model.notchSize.height, stats: stats, fans: fans, agents: agents, model: model,
                           tab: $model.tab, theme: $model.theme)
                 .transition(Self.dashboardTransition)
-        case .closed, .hovering:
+        case .closed, .hovering, .dictation:
             EmptyView()
         }
     }
@@ -122,8 +149,8 @@ private struct AlertContent: View {
 }
 
 /// 처마 끝 풍경처럼 위를 축으로 몇 번 흔들리다 멈춘다
-private struct ChimeSwing: ViewModifier {
-    let trigger: UUID
+struct ChimeSwing<Trigger: Equatable>: ViewModifier {
+    let trigger: Trigger
 
     func body(content: Content) -> some View {
         content.keyframeAnimator(initialValue: 0.0, trigger: trigger) { view, angle in

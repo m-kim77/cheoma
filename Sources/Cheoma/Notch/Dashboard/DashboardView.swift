@@ -15,7 +15,7 @@ enum DashboardTab: String, CaseIterable {
         switch self {
         case .graphs: CGSize(width: 720, height: 372)
         case .overview: CGSize(width: 660, height: 254)
-        case .power: CGSize(width: 660, height: 292)
+        case .power: CGSize(width: 660, height: 313)
         case .thermal: CGSize(width: 660, height: 300)
         case .fans: CGSize(width: 700, height: 340)
         case .apps: CGSize(width: 660, height: 318)
@@ -50,7 +50,7 @@ struct DashboardView: View {
         }
         // 위 양끝의 휜 부분(NotchShape.openEave)은 비워 두고 몸통 안쪽에만 그린다
         .padding(.horizontal, NotchShape.openEave + 12)
-        .padding(.bottom, 16)
+        .padding(.bottom, tab == .agents ? 4 : 16)
         .foregroundStyle(.white)
     }
 
@@ -58,26 +58,16 @@ struct DashboardView: View {
         HStack(alignment: .center, spacing: 0) {
             // 시·분만 보여 주니 분이 바뀔 때만 다시 그린다
             TimelineView(.everyMinute) { context in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    // 시계는 한 줄로 둔다. 좁은 탭에서 "오전"과 시각이 두 줄로 갈라지면 그만큼 아래 내용이 밀려 잘린다
-                    Text(context.date, format: .dateTime.hour().minute())
-                        .font(.system(size: 26, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .fixedSize()
-                    // 자리가 모자라면 날짜를 줄이고, 그래도 모자라면 뺀다
-                    ViewThatFits(in: .horizontal) {
-                        Text(context.date, format: .dateTime.month().day().weekday(.abbreviated))
-                        Text(context.date, format: .dateTime.day().weekday(.abbreviated))
-                        Color.clear.frame(width: 0, height: 0)
-                    }
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                // 시계는 한 줄로 둔다. 좁은 탭에서 "오전"과 시각이 두 줄로 갈라지면 그만큼 아래 내용이 밀려 잘린다.
+                // 날짜는 넓은 탭에서만 들어가서 탭마다 보였다 안 보였다 하므로 넣지 않는다
+                Text(context.date, format: .dateTime.hour().minute())
+                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
                     .lineLimit(1)
-                }
+                    .fixedSize()
             }
             Spacer(minLength: 10)
-            // 탭 이름은 줄바꿈되지 않게 (자리가 모자라면 날짜가 줄어든다)
+            // 탭 이름은 줄바꿈되지 않게
             tabPicker
                 .fixedSize()
             Spacer(minLength: 10)
@@ -103,7 +93,7 @@ struct DashboardView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .help("노치 모양: \(theme.title) (누르면 바뀜)")
+        .help("노치 모양: \(theme.title)")
         .accessibilityLabel("노치 모양 바꾸기, 지금 \(theme.title)")
     }
 
@@ -262,10 +252,13 @@ private struct PowerTab: View {
                 MetricRow(label: "CPU", value: Format.watts(c?.cpu), fraction: c.map { $0.cpu / total }, color: .blue)
                 MetricRow(label: "GPU", value: Format.watts(c?.gpu), fraction: c.map { $0.gpu / total }, color: .purple)
                 MetricRow(label: "뉴럴 엔진", value: Format.watts(c?.ane), fraction: c.map { $0.ane / total }, color: .pink)
-                MetricRow(label: "메모리", value: Format.watts(c?.dram), fraction: c.map { $0.dram / total }, color: .green)
+                MetricRow(label: "메모리", value: Format.watts(c?.memory), fraction: c.map { $0.memory / total }, color: .green)
                 MetricRow(label: "디스플레이", value: Format.watts(c?.display), fraction: c.map { $0.display / total }, color: .cyan)
-                // 백라이트, SSD, Wi-Fi, 팬, 주변기기 등 SoC 밖에서 쓰는 전력
-                let other = c.flatMap { c in snapshot.power?.systemWatts.map { max($0 - c.cpu - c.gpu - c.ane - c.dram - c.display, 0) } }
+                MetricRow(label: "SoC 기타", value: Format.watts(c?.soc), fraction: c.map { $0.soc / total }, color: .orange)
+                // 전압 변환 손실, 백라이트, SSD, Wi-Fi, 팬, 주변기기 등 SoC 밖에서 쓰는 전력
+                let other = c.flatMap { c in
+                    snapshot.power?.systemWatts.map { max($0 - c.cpu - c.gpu - c.ane - c.memory - c.display - c.soc, 0) }
+                }
                 MetricRow(label: "기타", value: Format.watts(other), fraction: other.map { $0 / total }, color: .gray)
             }
             .padding(12)

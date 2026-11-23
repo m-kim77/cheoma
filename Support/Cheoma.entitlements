@@ -5,5 +5,8 @@
     <!-- hardened runtime에서 Terminal에 Apple Event를 보내려면 필요하다 (에이전트 화면 읽기·답 보내기) -->
     <key>com.apple.security.automation.apple-events</key>
     <true/>
+    <!-- hardened runtime에서 마이크를 열려면 필요하다 (받아쓰기). 없으면 묻지도 않고 조용한 소리만 온다 -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
 </dict>
 </plist>

@@ -10,21 +10,6 @@ enum Sysctl {
 }
 
 enum IORegistry {
-    /// 이름이 일치하는 모든 서비스의 프로퍼티
-    static func properties(matching className: String) -> [[String: Any]] {
-        var iterator: io_iterator_t = 0
-        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching(className), &iterator) == KERN_SUCCESS else {
-            return []
-        }
-        defer { IOObjectRelease(iterator) }
-        var result: [[String: Any]] = []
-        while case let service = IOIteratorNext(iterator), service != 0 {
-            if let props = properties(of: service) { result.append(props) }
-            IOObjectRelease(service)
-        }
-        return result
-    }
-
     /// 이름이 일치하는 모든 서비스에서 속성 하나만 읽는다 (전체 속성을 복사하는 것보다 훨씬 가볍다)
     static func property(_ key: String, matching className: String) -> [Any] {
         var result: [Any] = []

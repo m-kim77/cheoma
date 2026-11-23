@@ -14,20 +14,16 @@ struct AgentsSetupPane: View {
         VStack(alignment: .leading, spacing: 9) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
-                    Text(isEmpty ? "코드 에이전트를 여기서 지켜봐요" : "연결 설정")
+                    Text(isEmpty ? "코드 에이전트" : "연결 설정")
                         .agentsFont(size: 13, weight: .semibold)
                     Spacer(minLength: 0)
                     AgentsTextSizeButtons(model: model)
                     AgentsCapsuleButton(title: "설정 창 열기", symbol: "macwindow") {
                         NotificationCenter.default.post(name: SettingsWindowController.openNotification, object: nil)
                     }
-                    .help("계정 · 알림 연결 · 노치 모양을 한곳에서 봐요")
+                    .help("계정 · 알림 연결 · 노치 모양")
                     if !isEmpty { closeButton }
                 }
-                Text("Terminal 탭이나 tmux에서 도는 Claude Code · Codex 같은 에이전트의 상태를 보여주고, 터미널로 가지 않고도 여기서 답할 수 있어요.")
-                    .agentsFont(size: 10.5)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             VStack(spacing: 6) {
                 terminalRow
@@ -61,12 +57,12 @@ struct AgentsSetupPane: View {
             case .granted:
                 SetupDone(text: "연결됨")
             case .notDetermined:
-                SetupDetail(text: "Terminal 탭의 화면을 읽고 답을 보내려면 허락이 필요해요")
+                SetupDetail(text: "자동화 권한 필요")
                 AgentsCapsuleButton(title: "Terminal 연결", prominent: true) { store.requestTerminalAccess() }
             case .denied:
-                SetupDetail(text: "거절됨 · 시스템 설정 › 개인정보 보호 및 보안 › 자동화에서 Cheoma의 Terminal을 켜 주세요")
+                SetupDetail(text: "거부됨 · 시스템 설정 › 개인정보 보호 및 보안 › 자동화에서 Cheoma의 Terminal을 허용하십시오.")
             case .targetNotRunning:
-                SetupDetail(text: "Terminal을 켜면 연결할 수 있어요")
+                SetupDetail(text: "Terminal이 실행 중이 아님")
             }
         }
     }
@@ -76,18 +72,18 @@ struct AgentsSetupPane: View {
         let targets = store.hookStatus.claude
         SetupRow(symbol: "bell.badge", title: "Claude Code") {
             if targets.isEmpty {
-                SetupDetail(text: "Claude Code 설정 폴더(~/.claude)가 없어요")
+                SetupDetail(text: "설정 폴더(~/.claude) 없음")
             } else if targets.allSatisfy(\.isInstalled) {
                 let occupied = targets.filter { if case .occupied = $0.statusLine { return true }; return false }
                 if occupied.isEmpty {
                     SetupDone(text: targets.count > 1 ? "계정 \(targets.count)개 연결됨" : "연결됨")
                 } else {
-                    SetupDetail(text: "연결됨 · \(occupied.map { AgentsStyle.accountName($0.configDir.lastPathComponent) }.joined(separator: ", "))은 "
-                                + "상태 줄을 다른 프로그램이 쓰고 있어서 구독 한도를 받을 수 없어요")
+                    SetupDetail(text: "연결됨 · \(occupied.map { AgentsStyle.accountName($0.configDir.lastPathComponent) }.joined(separator: ", ")): "
+                                + "다른 프로그램이 상태 줄 사용 중 · 구독 한도 받을 수 없음")
                 }
             } else {
                 VStack(alignment: .leading, spacing: 3) {
-                    SetupDetail(text: "선택을 기다리거나 차례가 끝나면 바로 알리고, 상태 줄로 구독 한도를 받아요")
+                    SetupDetail(text: "연결 안 됨")
                     HStack(spacing: 10) {
                         ForEach(targets, id: \.configDir) { target in
                             Label(AgentsStyle.accountName(target.configDir.lastPathComponent),
@@ -95,7 +91,7 @@ struct AgentsSetupPane: View {
                                 .agentsFont(size: 9.5, weight: .medium)
                                 .foregroundStyle(target.isInstalled ? Color.green : Color.white.opacity(0.5))
                                 .lineLimit(1)
-                                .help(target.isInstalled ? "연결됨" : "아직 연결 안 됨")
+                                .help(target.isInstalled ? "연결됨" : "연결 안 됨")
                         }
                     }
                 }
@@ -114,12 +110,12 @@ struct AgentsSetupPane: View {
             SetupRow(symbol: "bell.badge", title: "Codex") { SetupDone(text: "연결됨") }
         case .notInstalled:
             SetupRow(symbol: "bell.badge", title: "Codex") {
-                SetupDetail(text: "차례가 끝나면 바로 알려요")
+                SetupDetail(text: "연결 안 됨")
                 AgentsCapsuleButton(title: "Codex 연결", prominent: true) { store.installHooks() }
             }
         case .occupied(let program):
             SetupRow(symbol: "bell.badge", title: "Codex") {
-                SetupDetail(text: "notify 자리를 \(program)에서 쓰고 있어서 건드리지 않았어요 · 상태는 화면을 읽어서 알아내요")
+                SetupDetail(text: "다른 프로그램이 notify 사용 중 (\(program))")
             }
         }
     }
@@ -127,7 +123,7 @@ struct AgentsSetupPane: View {
     /// 위쪽 Claude 사용량: 구독 한도(기본) 또는 API 가격으로 셈한 비용
     private var usageRow: some View {
         SetupRow(symbol: "gauge.with.dots.needle.50percent", title: "Claude 사용량") {
-            SetupDetail(text: usageDisplay == .limits ? "구독의 5시간 · 주간 한도를 쓴 비율" : "쓴 토큰을 API 가격으로 셈한 값 · 구독이면 실제로 청구되지 않아요")
+            SetupDetail(text: usageDisplay == .limits ? "5시간 · 주간 한도 사용률" : "API 가격 환산 · 구독 요금제는 청구되지 않음")
             HStack(spacing: 2) {
                 ForEach(ClaudeUsageDisplay.allCases, id: \.self) { option in
                     Button { usageDisplay = option } label: {
@@ -151,10 +147,10 @@ struct AgentsSetupPane: View {
     private var launchRow: some View {
         SetupRow(symbol: "plus.rectangle.on.rectangle", title: "새 에이전트") {
             if store.isTmuxAvailable {
-                SetupDetail(text: "tmux 새 세션에서 띄우면 Esc · 방향키까지 보낼 수 있어요")
+                SetupDetail(text: "tmux 새 세션에서 실행")
                 AgentsCapsuleButton(title: "새 에이전트 실행", prominent: true) { pane = .launcher }
             } else {
-                SetupDetail(text: "tmux가 필요해요 (brew install tmux)")
+                SetupDetail(text: "tmux 필요 (brew install tmux)")
             }
         }
     }
@@ -226,7 +222,7 @@ struct AgentsLauncherPane: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("새 에이전트")
                     .agentsFont(size: 13, weight: .semibold)
-                Text("tmux 새 세션에서 실행해요")
+                Text("tmux 새 세션에서 실행")
                     .agentsFont(size: 10)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
@@ -243,7 +239,7 @@ struct AgentsLauncherPane: View {
 
             section("에이전트") {
                 if store.launchableAgents.isEmpty {
-                    Text("설치된 에이전트를 찾지 못했어요")
+                    Text("설치된 에이전트 없음")
                         .agentsFont(size: 10.5)
                         .foregroundStyle(.secondary)
                 } else {
@@ -286,7 +282,7 @@ struct AgentsLauncherPane: View {
 
             HStack(spacing: 8) {
                 if !store.isTmuxAvailable {
-                    Label("tmux가 필요해요 (brew install tmux)", systemImage: "exclamationmark.triangle.fill")
+                    Label("tmux 필요 (brew install tmux)", systemImage: "exclamationmark.triangle.fill")
                         .agentsFont(size: 10)
                         .foregroundStyle(.orange)
                 } else if let kind = selectedKind, let folder = selectedFolder {
@@ -382,7 +378,7 @@ struct AgentsLauncherPane: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help([account.email, account.plan].compactMap { $0 }.joined(separator: " · ") + (percent.isEmpty ? "" : " · 5시간 한도\(percent) 씀"))
+        .help([account.email, account.plan].compactMap { $0 }.joined(separator: " · ") + (percent.isEmpty ? "" : " · 5시간 한도\(percent) 사용"))
     }
     private var selectedFolder: String? { folder ?? folders.first }
     private var canLaunch: Bool { store.isTmuxAvailable && selectedKind != nil && selectedFolder != nil }
@@ -489,8 +485,8 @@ struct AgentsLauncherPane: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.prompt = "고르기"
-        panel.message = "에이전트를 실행할 폴더를 고르세요"
+        panel.prompt = "선택"
+        panel.message = "에이전트를 실행할 폴더 선택"
         if let current = selectedFolder { panel.directoryURL = URL(fileURLWithPath: current).deletingLastPathComponent() }
         // 고르는 동안 마우스가 노치 밖에 있어도 닫히지 않게
         model.keepsOpen = true

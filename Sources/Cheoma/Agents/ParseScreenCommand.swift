@@ -25,7 +25,7 @@ enum ParseScreenCommand {
             guard let text = try? String(contentsOfFile: file, encoding: .utf8) else { continue }
             let name = URL(fileURLWithPath: file).lastPathComponent
             let kind = forcedKind ?? AgentKind.allCases.first { name.hasPrefix("\($0.rawValue)-") } ?? .claude
-            let screen = TerminalScreen(text: text, capturedAt: Date())
+            let screen = TerminalScreen(text: text)
             var analysis = AgentScreenParser.analyze(screen, kind: kind)
             // 시간은 20번 돌린 평균 (처음 한 번은 준비 비용이 섞인다)
             let start = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)

@@ -15,7 +15,7 @@ enum ClickTest {
             ("사용량 카드", CGPoint(x: 560, y: 107)),
             ("왼쪽 목록 첫 줄", CGPoint(x: 260, y: 160)),
             ("최근 기록 첫 줄", CGPoint(x: 242, y: 306)),
-            ("탭: 개요", CGPoint(x: 450, y: 63)),
+            ("탭: 개요", CGPoint(x: 420, y: 63)),
         ]
         if CommandLine.arguments.contains("--hit") {
             hitMap()
@@ -79,6 +79,9 @@ enum ClickTest {
         let agents = AgentStore.preview()
         model.notchSize = CGSize(width: 220, height: 38)
         model.theme = .basic
+        // 버튼 위치는 보통 글자 · 기본 크기에서 잰 값이다 (전에 끌어 둔 크기가 남아 있으면 어긋난다)
+        model.agentsTextScale = .normal
+        model.resetAgentsSize()
         model.previewOpen(.agents)
         AgentsTab.debugPane = nil
 

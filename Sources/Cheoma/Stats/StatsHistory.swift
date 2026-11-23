@@ -1,7 +1,7 @@
 import Foundation
 
 /// 그래프로 그리는 측정 항목 (raw 값은 저장 파일의 키)
-enum Metric: String, CaseIterable {
+enum Metric: String {
     case cpu, gpu
     case systemPower, cpuPower, gpuPower
     case networkIn, networkOut

@@ -69,7 +69,7 @@ struct FanTab: View {
     @ViewBuilder
     private var content: some View {
         if !controller.hasFans {
-            Text("이 맥은 팬이 없어서 조절할 수 없어요 (팬 없이 식히는 모델)")
+            Text("이 Mac에는 팬이 없습니다.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         } else {
@@ -78,7 +78,7 @@ struct FanTab: View {
                 switch controller.mode {
                 case .automatic:
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("macOS가 온도에 맞춰 조절해요. 시원할 때는 팬이 멈춰 있어요.")
+                        Text("macOS가 온도에 따라 조절합니다.")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                         Spacer(minLength: 0)
@@ -96,7 +96,7 @@ struct FanTab: View {
                     CurveEditor(controller: controller)
                 }
             case .notInstalled:
-                installPrompt("팬 속도를 바꾸려면 관리자 권한 도우미가 필요해요", button: "도우미 설치")
+                installPrompt("팬 속도를 바꾸려면 도우미를 설치해야 합니다.", button: "도우미 설치")
             case .needsReinstall(let reason):
                 installPrompt(reason, button: "다시 설치")
             case .working:

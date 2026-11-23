@@ -68,7 +68,7 @@ final class TerminalAppBridge: TerminalBridge, Sendable {
     func capture(_ location: TerminalLocation) throws -> TerminalScreen {
         let tty = try Self.tty(of: location)
         let output = try runIfRunning(TerminalAppScript.capture(tty: tty))
-        return TerminalScreen(text: TerminalAppScript.screenText(output), capturedAt: Date())
+        return TerminalScreen(text: TerminalAppScript.screenText(output))
     }
 
     /// 그 탭에 `do script`로 글자를 친다. do script는 늘 Return까지 누르므로 pressEnter와 상관없이 Enter가 같이 간다.
@@ -79,7 +79,7 @@ final class TerminalAppBridge: TerminalBridge, Sendable {
     }
 
     func send(key: TerminalKey, to location: TerminalLocation) throws {
-        throw AgentBridgeError(message: "Terminal 탭에는 특수 키를 보낼 수 없어요. tmux 세션에서는 돼요")
+        throw AgentBridgeError(message: "특수 키는 tmux 세션에서만 지원")
     }
 
     /// 그 탭을 고르고 창을 맨 앞으로 가져온 뒤 Terminal을 앞으로 띄운다
@@ -119,7 +119,7 @@ final class TerminalAppBridge: TerminalBridge, Sendable {
 
     private static func tty(of location: TerminalLocation) throws -> String {
         guard case .terminalApp(let tty) = location else {
-            throw AgentBridgeError(message: "Terminal 탭이 아니에요")
+            throw AgentBridgeError(message: "Terminal 탭 아님")
         }
         return tty
     }
@@ -131,7 +131,7 @@ final class TerminalAppBridge: TerminalBridge, Sendable {
             // 스크립트는 표준 입력으로 넘긴다 (인자 길이 제한, 따옴표 문제 없이)
             result = try AgentCommandRunner.run("/usr/bin/osascript", [], input: script, timeout: timeout)
         } catch {
-            throw AgentBridgeError(message: "osascript를 실행하지 못했어요: \(error.localizedDescription)")
+            throw AgentBridgeError(message: "osascript를 실행할 수 없음: \(error.localizedDescription)")
         }
         if result.timedOut { throw AgentBridgeError(message: TerminalAppScript.Message.timeout) }
         guard result.status == 0 else {
@@ -147,10 +147,10 @@ final class TerminalAppBridge: TerminalBridge, Sendable {
 /// Terminal에 보낼 AppleScript 만들기와 결과 읽기. Apple Event 없이 확인할 수 있게 순수 함수로 뺐다 (`--agents --selftest`)
 enum TerminalAppScript {
     enum Message {
-        static let denied = "Terminal을 제어할 권한이 없어요. 시스템 설정 › 개인정보 보호 및 보안 › 자동화에서 Cheoma의 Terminal을 켜 주세요"
-        static let notRunning = "Terminal이 꺼져 있어요"
-        static let tabMissing = "그 Terminal 탭을 찾지 못했어요"
-        static let timeout = "Terminal이 응답하지 않아요"
+        static let denied = "Terminal을 제어할 권한이 없습니다. 시스템 설정 › 개인정보 보호 및 보안 › 자동화에서 허용하십시오."
+        static let notRunning = "Terminal이 실행 중이 아님"
+        static let tabMissing = "그 Terminal 탭을 찾을 수 없음"
+        static let timeout = "Terminal 응답 없음"
     }
 
     /// 스크립트가 결과 앞에 붙이는 표시. 탭을 못 찾았거나 Terminal이 꺼져 있으면 오류 대신 이 글자를 돌려준다
@@ -317,7 +317,7 @@ enum TerminalAppScript {
         if output == notRunningMark { throw AgentBridgeError(message: Message.notRunning) }
         if output == noTabMark { throw AgentBridgeError(message: Message.tabMissing) }
         guard output.hasPrefix(okMark) else {
-            throw AgentBridgeError(message: "Terminal에서 알 수 없는 답이 왔어요")
+            throw AgentBridgeError(message: "Terminal에서 알 수 없는 응답")
         }
         return String(output.dropFirst(okMark.count))
     }
@@ -351,7 +351,7 @@ enum TerminalAppScript {
         case -600, -609: Message.notRunning
         case -1728, -1719: Message.tabMissing
         case -1712: Message.timeout
-        default: "Terminal 연동에 실패했어요" + (errorCode(in: error).map { " (\($0))" } ?? "")
+        default: "Terminal 연동 실패" + (errorCode(in: error).map { " (\($0))" } ?? "")
         }
     }
 

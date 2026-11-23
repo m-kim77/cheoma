@@ -52,16 +52,12 @@ final class TmuxBridge: TerminalBridge, Sendable {
         return Self.parsePanes(paneOutput, clients: clientOutput)
     }
 
-    /// 새 tmux 세션에서 에이전트를 띄운다. 사용자 로그인 셸로 실행해서 PATH · 별칭이 터미널에서와 같다
-    func launch(_ kind: AgentKind, in folder: String) throws -> TerminalLocation {
-        try launch(command: kind.command, namePrefix: Self.sessionPrefix + kind.rawValue, in: folder)
-    }
-
-    /// launch의 본체. 테스트에서는 에이전트 대신 해 없는 명령(echo hi; sleep 30)으로 부른다
+    /// 새 tmux 세션에서 명령을 띄운다. 사용자 로그인 셸로 실행해서 PATH · 별칭이 터미널에서와 같다.
+    /// 테스트에서는 에이전트 대신 해 없는 명령(echo hi; sleep 30)으로 부른다
     func launch(command: String, namePrefix: String, in folder: String) throws -> TerminalLocation {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: folder, isDirectory: &isDirectory), isDirectory.boolValue else {
-            throw AgentBridgeError(message: "그 폴더를 찾지 못했어요")
+            throw AgentBridgeError(message: "그 폴더를 찾을 수 없음")
         }
         let shell = Self.loginShell()
         let existing = Set(try runIfServer(["list-sessions", "-F", "#{session_name}"])?.split(separator: "\n").map(String.init) ?? [])
@@ -75,14 +71,14 @@ final class TmuxBridge: TerminalBridge, Sendable {
                 let output = try run(arguments)
                 let fields = output.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: Self.separator)
                 guard fields.count == 2, fields[0].hasPrefix("%") else {
-                    throw AgentBridgeError(message: "tmux 세션을 만들었지만 패널을 찾지 못했어요")
+                    throw AgentBridgeError(message: "tmux 세션은 만들었으나 패널을 찾을 수 없음")
                 }
                 return .tmux(paneID: fields[0], tty: fields[1])
             } catch let error as AgentBridgeError where error.message.contains("duplicate session") {
                 number += 1
             }
         }
-        throw AgentBridgeError(message: "tmux 세션 이름을 정하지 못했어요")
+        throw AgentBridgeError(message: "tmux 세션 이름을 정할 수 없음")
     }
 
     /// 그 패널의 세션을 붙이는 명령 (`tmux attach -t …`). Terminal 새 탭에서 열 때 쓴다
@@ -95,7 +91,7 @@ final class TmuxBridge: TerminalBridge, Sendable {
     func kill(_ location: TerminalLocation) throws {
         let session = try sessionName(of: location)
         guard session.hasPrefix(Self.sessionPrefix) else {
-            throw AgentBridgeError(message: "Cheoma가 띄운 tmux 세션만 끝낼 수 있어요")
+            throw AgentBridgeError(message: "Cheoma가 시작한 tmux 세션만 종료할 수 있습니다.")
         }
         _ = try run(["kill-session", "-t", "=" + session])
     }
@@ -104,7 +100,7 @@ final class TmuxBridge: TerminalBridge, Sendable {
     func capture(_ location: TerminalLocation) throws -> TerminalScreen {
         let pane = try Self.paneID(of: location)
         let output = try run(["capture-pane", "-p", "-e", "-t", pane])
-        return TerminalScreen(text: AgentCommandRunner.trimmingTrailingBlankLines(output), capturedAt: Date())
+        return TerminalScreen(text: AgentCommandRunner.trimmingTrailingBlankLines(output))
     }
 
     /// 글자를 그대로(-l) 보낸다. 여러 줄이면 붙여넣기로 보내서 줄바꿈이 중간에 Enter로 들어가지 않게 한다
@@ -151,10 +147,10 @@ final class TmuxBridge: TerminalBridge, Sendable {
     // MARK: - 순수 함수 (`--agents --selftest`에서 확인)
 
     enum Message {
-        static let notInstalled = "tmux를 찾지 못했어요. brew install tmux로 설치해 주세요"
-        static let timeout = "tmux가 응답하지 않아요"
-        static let paneMissing = "그 tmux 패널을 찾지 못했어요"
-        static let noServer = "tmux가 꺼져 있어요"
+        static let notInstalled = "tmux를 찾을 수 없습니다. brew install tmux로 설치하십시오."
+        static let timeout = "tmux 응답 없음"
+        static let paneMissing = "그 tmux 패널을 찾을 수 없음"
+        static let noServer = "tmux가 실행 중이 아님"
     }
 
     static func keyName(_ key: TerminalKey) -> String {
@@ -221,8 +217,8 @@ final class TmuxBridge: TerminalBridge, Sendable {
         if text.contains("can't find pane") || text.contains("can't find window") || text.contains("can't find session") {
             return Message.paneMissing
         }
-        if text.contains("duplicate session") { return "같은 이름의 tmux 세션이 있어요 (duplicate session)" }
-        return "tmux 명령이 실패했어요" + (text.isEmpty ? "" : ": " + (text.split(separator: "\n").first.map(String.init) ?? text))
+        if text.contains("duplicate session") { return "같은 이름의 tmux 세션이 이미 있음 (duplicate session)" }
+        return "tmux 명령 실패" + (text.isEmpty ? "" : ": " + (text.split(separator: "\n").first.map(String.init) ?? text))
     }
 
     static func isNoServer(_ error: String) -> Bool {
@@ -241,7 +237,7 @@ final class TmuxBridge: TerminalBridge, Sendable {
     // MARK: - 실행
 
     private static func paneID(of location: TerminalLocation) throws -> String {
-        guard case .tmux(let paneID, _) = location else { throw AgentBridgeError(message: "tmux 세션이 아니에요") }
+        guard case .tmux(let paneID, _) = location else { throw AgentBridgeError(message: "tmux 세션 아님") }
         return paneID
     }
 
@@ -277,7 +273,7 @@ final class TmuxBridge: TerminalBridge, Sendable {
             result = try AgentCommandRunner.run(executable, ["-u"] + socket + arguments,
                                                 environment: Self.environment(), timeout: Self.timeout)
         } catch {
-            throw AgentBridgeError(message: "tmux를 실행하지 못했어요: \(error.localizedDescription)")
+            throw AgentBridgeError(message: "tmux를 실행할 수 없음: \(error.localizedDescription)")
         }
         if result.timedOut { throw AgentBridgeError(message: Message.timeout) }
         guard result.status == 0 else {

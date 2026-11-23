@@ -30,7 +30,6 @@ extension AgentUsageReader {
         var cwd: String?
         var lastMessage: String?
         var isTurnComplete: Bool?
-        var lastTime: Double?
         var limits: CodexLimits?
 
         init(stat: JSONLFile.Stat) { self.stat = stat }
@@ -52,8 +51,8 @@ extension AgentUsageReader {
             return timestamp == nil || type == nil || payload == nil
         }
         guard let type, let payload, j.isObject(payload) else { return }
-        let time = timestamp.flatMap { j.date($0) }
-        if let time { file.lastTime = max(file.lastTime ?? 0, time) }
+        // 시각은 event_msg(token_count)에서만 필요하다
+        let time = j.stringValue(type, is: "event_msg") ? timestamp.flatMap { j.date($0) } : nil
 
         if j.stringValue(type, is: "session_meta") {
             j.forEachMember(ofObjectAt: payload.lowerBound) { key, value in

@@ -40,14 +40,13 @@ struct AppVersion: Comparable, CustomStringConvertible, Sendable {
 /// GitHub 릴리스 API 응답에서 쓰는 부분
 struct AppRelease: Decodable, Equatable, Sendable {
     let tagName: String
-    let name: String?
     let body: String?
     let htmlURL: URL
     let draft: Bool
     let prerelease: Bool
 
     enum CodingKeys: String, CodingKey {
-        case tagName = "tag_name", name, body, htmlURL = "html_url", draft, prerelease
+        case tagName = "tag_name", body, htmlURL = "html_url", draft, prerelease
     }
 
     var version: AppVersion? { AppVersion(tagName) }
@@ -212,7 +211,7 @@ final class UpdateChecker: ObservableObject {
     }
 
     static let sampleRelease = AppRelease(
-        tagName: "v0.2.0", name: "Cheoma 0.2.0", body: """
+        tagName: "v0.2.0", body: """
         Coding agents in the notch.
 
         ---

@@ -7,7 +7,7 @@ struct AgentsAccountsPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            AgentsPaneHeader(title: "계정", detail: "이 맥에 로그인된 에이전트 계정이에요", pane: $pane)
+            AgentsPaneHeader(title: "계정", pane: $pane)
             ViewThatFits(in: .vertical) {
                 cards
                 ScrollView(.vertical, showsIndicators: false) { cards }
@@ -82,7 +82,7 @@ private struct ClaudeAccountCard: View {
         AccountCard(mark: AgentMark(kind: .claude), tint: AgentsStyle.color(.claude), title: AgentsStyle.accountName(account.account), plan: account.plan,
                     email: account.email ?? "로그인 정보 없음") {
             if account.limits.isEmpty {
-                Text("한도 정보 없음 · 이 계정으로 Claude Code를 한 번 쓰면 보여요")
+                Text("한도 정보 없음")
                     .agentsFont(size: 9.5)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -96,7 +96,7 @@ private struct ClaudeAccountCard: View {
     }
 
     private var footer: String {
-        var parts = [running > 0 ? "세션 \(running)개 도는 중" : "도는 세션 없음"]
+        var parts = [running > 0 ? "세션 \(running)개 실행 중" : "실행 중인 세션 없음"]
         if let date = account.limitsUpdatedAt { parts.append("한도 \(AgentsStyle.ago(date)) 받음") }
         return parts.joined(separator: " · ")
     }
@@ -121,14 +121,14 @@ private struct CodexAccountCard: View {
                     email: login?.email ?? (login?.mode == "apikey" ? "API 키로 로그인" : "로그인 정보 없음")) {
             let windows = [usage?.primary, usage?.secondary].compactMap { $0 }
             if windows.isEmpty {
-                Text("한도 정보 없음 · Codex를 한 번 쓰면 보여요")
+                Text("한도 정보 없음")
                     .agentsFont(size: 9.5)
                     .foregroundStyle(.tertiary)
             } else {
                 ForEach(windows, id: \.windowMinutes) { AccountUsageBar(window: $0) }
             }
         } footer: {
-            Text(([running > 0 ? "세션 \(running)개 도는 중" : "도는 세션 없음"]
+            Text(([running > 0 ? "세션 \(running)개 실행 중" : "실행 중인 세션 없음"]
                   + [usage.map { "한도 \(AgentsStyle.ago($0.updatedAt)) 기록" }].compactMap { $0 }).joined(separator: " · "))
         }
         .help(["\(login?.mode == "chatgpt" ? "ChatGPT 계정으로 로그인 · " : "")\(AgentsStyle.abbreviated(account.home))/auth.json",
@@ -155,9 +155,9 @@ private struct AntigravityAccountCard: View {
                 }
             }
         } footer: {
-            Text("\(running > 0 ? "세션 \(running)개 도는 중" : "도는 세션 없음") · 한도 \(AgentsStyle.ago(usage.updatedAt)) 받음")
+            Text("\(running > 0 ? "세션 \(running)개 실행 중" : "실행 중인 세션 없음") · 한도 \(AgentsStyle.ago(usage.updatedAt)) 받음")
         }
-        .help("agy -p /usage로 받은 값이에요 (모델을 부르지 않아요)")
+        .help("agy -p /usage에서 받은 한도")
     }
 }
 
@@ -170,7 +170,7 @@ private struct LocalServerCard: View {
                     tint: AgentsStyle.localColor, title: server.kind.displayName, plan: "로컬",
                     email: server.address.map(AgentsStyle.abbreviatedAddress) ?? "API 서버 꺼짐") {
             if server.models.isEmpty {
-                Text(server.isServerOff ? "개발자 탭에서 서버를 켜면 올라온 모델이 보여요" : "올라온 모델 없음")
+                Text(server.isServerOff ? "개발자 탭에서 서버 시작 필요" : "올라온 모델 없음")
                     .agentsFont(size: 9.5)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -361,7 +361,7 @@ struct AgentsRecordDetail: View {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
                 if let cwd = record.cwd { info("폴더", AgentsStyle.abbreviated(cwd)) }
                 if let account = record.account { info("계정", accountText(account)) }
-                info("마지막", "\(AgentsStyle.ago(record.lastActivity)) · \(record.isTurnComplete == false ? "하던 중에 멈춤" : "차례를 마침")")
+                info("마지막", "\(AgentsStyle.ago(record.lastActivity)) · \(record.isTurnComplete == false ? "중단됨" : "완료")")
                 if let cost = record.costUSD { info("API 환산", AgentsStyle.cost(cost)) }
             }
             if let message = record.lastMessage, !message.isEmpty {
@@ -377,7 +377,7 @@ struct AgentsRecordDetail: View {
             if let target = AgentsResumeOptions.target(record) {
                 AgentsResumeOptions(target: target, currentAccount: record.account, store: store) { pane = .session }
             } else {
-                Text(record.cwd == nil ? "작업 폴더를 몰라서 이어서 할 수 없어요" : "\(record.kind.displayName)는 여기서 이어서 할 수 없어요")
+                Text(record.cwd == nil ? "작업 폴더 정보가 없어 이어서 할 수 없음" : "\(record.kind.displayName) 세션은 이어서 할 수 없음")
                     .agentsFont(size: 10)
                     .foregroundStyle(.tertiary)
             }
@@ -445,7 +445,7 @@ struct AgentsResumeOptions: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(store.isTmuxAvailable ? "tmux 새 세션에서 이어서 해요" : "이어서 하려면 tmux가 필요해요 (brew install tmux)")
+            Text(store.isTmuxAvailable ? "tmux 새 세션에서 이어서 하기" : "tmux 필요 (brew install tmux)")
                 .agentsFont(size: 9.5)
                 .foregroundStyle(.tertiary)
             HStack(spacing: 6) {
@@ -488,7 +488,7 @@ struct AgentsResumeOptions: View {
             return Option(title: isCurrent ? "이어서 하기" : "\(name)로 이어서\(percent)",
                           symbol: isCurrent ? "play.fill" : "arrow.triangle.swap",
                           configDir: account.configDir, isCurrent: isCurrent,
-                          help: (isCurrent ? "\(name) 계정으로 이어서 해요" : "대화 기록을 \(name) 계정으로 복사하고 그 계정으로 이어서 해요 (원래 기록은 그대로)")
+                          help: (isCurrent ? "\(name) 계정으로 이어서 하기" : "대화 기록을 \(name) 계정으로 복사하여 이어서 하기 (원본 기록 유지)")
                               + "\n\(AgentResume.resumeCommand(target, configDir: account.configDir))")
         }
         .filter { includesCurrent || !$0.isCurrent }
@@ -510,7 +510,7 @@ struct AgentsResumeOptions: View {
             return Option(title: isCurrent ? "이어서 하기" : "\(name)로 이어서\(percent)",
                           symbol: isCurrent ? "play.fill" : "arrow.triangle.swap",
                           configDir: account.home, isCurrent: isCurrent,
-                          help: (isCurrent ? "\(name) 계정으로 이어서 해요" : "대화 기록을 \(name) 계정으로 복사하고 그 계정으로 이어서 해요 (원래 기록은 그대로)")
+                          help: (isCurrent ? "\(name) 계정으로 이어서 하기" : "대화 기록을 \(name) 계정으로 복사하여 이어서 하기 (원본 기록 유지)")
                               + "\n\(AgentResume.resumeCommand(target, configDir: account.home))")
         }
         .filter { includesCurrent || !$0.isCurrent }

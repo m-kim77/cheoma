@@ -1,7 +1,7 @@
 #!/bin/sh
 # Cheoma.app 만들기: 릴리스 빌드 → 앱 번들 구성 → 서명 (→ 공증)
 #   scripts/build-app.sh            dist/Cheoma.app 생성
-#   scripts/build-app.sh --install  ~/Applications/Cheoma.app 에도 복사
+#   scripts/build-app.sh --install  ~/Applications/Cheoma.app 에 설치하고 dist/Cheoma.app은 지운다
 # 환경 변수
 #   JOBS            빌드 동시 작업 수 (기본 2: 팬이 덜 돈다)
 #   SIGN_IDENTITY   서명 인증서 이름. 예: "Developer ID Application: 이름 (TEAMID)".
@@ -63,5 +63,7 @@ if [ "$1" = "--install" ]; then
     mkdir -p "$HOME/Applications"
     rm -rf "$HOME/Applications/Cheoma.app"
     ditto "$APP" "$HOME/Applications/Cheoma.app"
+    # 같은 앱이 두 군데 있으면 Spotlight · 앱 목록에 Cheoma가 둘로 나오고, 다른 쪽을 열면 하나 더 뜬다
+    rm -rf "$APP"
     echo "설치했어요: $HOME/Applications/Cheoma.app"
 fi

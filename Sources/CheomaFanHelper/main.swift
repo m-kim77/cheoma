@@ -47,23 +47,23 @@ final class FanService: NSObject, FanHelperProtocol, @unchecked Sendable {
 
     func setFanSpeeds(_ rpms: [NSNumber]?, reply: @escaping @Sendable (String?) -> Void) {
         queue.async { [self] in
-            guard let smc else { return reply("SMC를 열 수 없어요") }
-            guard !fans.isEmpty else { return reply("이 맥에서 팬을 찾지 못했어요") }
+            guard let smc else { return reply("SMC를 열 수 없습니다.") }
+            guard !fans.isEmpty else { return reply("이 Mac에서 팬을 찾을 수 없습니다.") }
             guard let rpms, !rpms.isEmpty else {
-                return reply(restoreAutomatic(reason: "앱 요청") ? nil : "팬을 자동으로 되돌리지 못해서 다시 시도하고 있어요")
+                return reply(restoreAutomatic(reason: "앱 요청") ? nil : "팬을 자동으로 되돌리지 못해 다시 시도하는 중입니다.")
             }
             var targets: [Float] = []
             for (index, fan) in fans.enumerated() {
                 let rpm = rpms[min(index, rpms.count - 1)].floatValue
                 guard rpm.isFinite else {
                     restoreAutomatic(reason: "잘못된 값")
-                    return reply("팬 속도 값이 잘못됐어요")
+                    return reply("팬 속도 값이 잘못되었습니다.")
                 }
                 // 0은 멈춤, 그 밖의 값은 이 팬의 최소~최대 안으로
                 let target = rpm <= 0 ? 0 : min(max(rpm, fan.minimum), fan.maximum)
                 guard smc.write(fan.modeKey, uint8: 1), smc.write(fan.targetKey, float: target) else {
                     restoreAutomatic(reason: "쓰기 실패")
-                    return reply("팬 \(index + 1) 설정에 실패했어요 (\(fan.modeKey)/\(fan.targetKey))")
+                    return reply("팬 \(index + 1) 설정에 실패했습니다. (\(fan.modeKey)/\(fan.targetKey))")
                 }
                 targets.append(target)
             }

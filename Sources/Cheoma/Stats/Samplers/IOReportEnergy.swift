@@ -7,8 +7,11 @@ final class IOReportEnergy {
         var cpu: Double = 0
         var gpu: Double = 0
         var ane: Double = 0
-        var dram: Double = 0
+        /// DRAM과 메모리 컨트롤러(DCS, AMCC). 메모리를 많이 오가는 GPU 작업에서는 컨트롤러 쪽도 10W를 넘는다
+        var memory: Double = 0
         var display: Double = 0
+        /// 위 어디에도 안 들어가는 SoC 내부 레일(AFR, FAB)
+        var soc: Double = 0
     }
 
     private typealias CopyChannels = @convention(c) (CFString?, CFString?, UInt64, UInt64, UInt64) -> Unmanaged<CFMutableDictionary>?
@@ -29,7 +32,7 @@ final class IOReportEnergy {
     /// 이보다 오래 못 쟀으면(잠자기 등) 그 사이 평균이 0에 가까워 기록을 끌어내리므로 버리고 기준만 잡는다
     private static let maximumInterval: TimeInterval = 30
 
-    private enum Kind { case cpu, gpu, ane, anePart, dram, display }
+    private enum Kind { case cpu, gpu, ane, anePart, memory, display, soc }
     /// 채널 이름 → 종류와 줄 단위 (이름은 바뀌지 않으므로 처음 본 뒤로는 다시 해석하지 않는다)
     private var classified: [String: (kind: Kind, joules: Double)?] = [:]
 
@@ -95,8 +98,9 @@ final class IOReportEnergy {
             switch channel.kind {
             case .cpu: joules.cpu += value
             case .gpu: joules.gpu += value
-            case .dram: joules.dram += value
+            case .memory: joules.memory += value
             case .display: joules.display += value
+            case .soc: joules.soc += value
             case .ane: aneTotal = (aneTotal ?? 0) + value
             case .anePart: aneParts += value
             }
@@ -104,7 +108,7 @@ final class IOReportEnergy {
         joules.ane = aneTotal ?? aneParts
 
         return Reading(cpu: joules.cpu / dt, gpu: joules.gpu / dt, ane: joules.ane / dt,
-                       dram: joules.dram / dt, display: joules.display / dt)
+                       memory: joules.memory / dt, display: joules.display / dt, soc: joules.soc / dt)
     }
 
     private func classify(_ name: String, _ item: CFDictionary) -> (kind: Kind, joules: Double)? {
@@ -112,8 +116,9 @@ final class IOReportEnergy {
         let kind: Kind? = switch name {
         case "CPU Energy": .cpu
         case "GPU Energy": .gpu
-        case "DRAM": .dram
+        case "DRAM", "DCS", "AMCC": .memory
         case "DISP", "DISPEXT": .display
+        case "AFR", "FAB": .soc
         case "ANE": .ane
         // 칩에 따라 ANE가 ANE0, ANE1...로 쪼개져서만 나오기도 함
         default: Self.isANEPart(name) ? .anePart : nil
@@ -126,7 +131,7 @@ final class IOReportEnergy {
     }
 
     private static func isWanted(_ name: String) -> Bool {
-        ["CPU Energy", "GPU Energy", "DRAM", "DISP", "DISPEXT", "ANE"].contains(name) || isANEPart(name)
+        ["CPU Energy", "GPU Energy", "DRAM", "DCS", "AMCC", "DISP", "DISPEXT", "AFR", "FAB", "ANE"].contains(name) || isANEPart(name)
     }
 
     private static func isANEPart(_ name: String) -> Bool {

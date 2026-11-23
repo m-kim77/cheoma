@@ -16,7 +16,7 @@ enum AgentScreenParser {
         while let last = lines.last, last.isEmpty { lines.removeLast() }
         guard !lines.isEmpty else { return ScreenAnalysis(state: .unknown, question: nil, choices: [], summary: nil) }
 
-        if let menu = numberedMenu(lines, kind: kind) ?? cursorMenu(lines) ?? yesNoQuestion(lines) {
+        if let menu = numberedMenu(lines) ?? cursorMenu(lines) ?? yesNoQuestion(lines) {
             return ScreenAnalysis(state: .needsChoice, question: menu.question, choices: menu.choices,
                                   summary: menu.question ?? menu.choices.first?.label)
         }
@@ -40,7 +40,7 @@ enum AgentScreenParser {
     private static let cursors: Set<Character> = ["❯", "›", "→", ">", "▶", "●"]
 
     /// "1. Yes", "› 2. No (esc)" 같은 번호 목록. 커서가 하나 있거나 바로 아래에 "Enter to …" 안내가 있어야 진짜 메뉴로 본다
-    private static func numberedMenu(_ lines: [String], kind: AgentKind) -> Menu? {
+    private static func numberedMenu(_ lines: [String]) -> Menu? {
         let top = max(0, lines.count - bottomRows)
         var options: [(row: Int, number: Int, label: String, cursor: Bool)] = []
         var gap = 0

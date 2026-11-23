@@ -286,7 +286,7 @@ enum AgentsSelfTest {
         _ = try? tmux.run(["new-session", "-d", "-s", "other-\(tag)", "-x", "80", "-y", "24", "sleep", "30"])
         if let other = ((try? tmux.panes()) ?? []).first(where: { $0.sessionName == "other-\(tag)" }) {
             let location = TerminalLocation.tmux(paneID: other.paneID, tty: other.tty)
-            check(thrownMessage { try tmux.kill(location) } == "Cheoma가 띄운 tmux 세션만 끝낼 수 있어요", "cheoma- 아닌 세션은 안 끝냄")
+            check(thrownMessage { try tmux.kill(location) } == "Cheoma가 시작한 tmux 세션만 종료할 수 있습니다.", "cheoma- 아닌 세션은 안 끝냄")
         } else {
             check(false, "다른 세션 만들기")
         }
@@ -299,7 +299,7 @@ enum AgentsSelfTest {
             check(false, "kill", error.localizedDescription)
         }
         check(thrownMessage { try tmux.capture(.tmux(paneID: "%999", tty: "")) } == TmuxBridge.Message.paneMissing, "없는 패널")
-        check(thrownMessage { try tmux.send(key: .enter, to: .terminalApp(tty: "/dev/ttys001")) } == "tmux 세션이 아니에요", "다른 위치")
+        check(thrownMessage { try tmux.send(key: .enter, to: .terminalApp(tty: "/dev/ttys001")) } == "tmux 세션 아님", "다른 위치")
     }
 
     private static func waitForScreen(_ tmux: TmuxBridge, _ location: TerminalLocation, until done: (String) -> Bool) -> String {

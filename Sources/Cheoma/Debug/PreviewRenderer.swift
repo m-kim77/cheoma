@@ -1,5 +1,6 @@
 #if DEBUG
 import AppKit
+import AVFoundation
 import SwiftUI
 
 /// `Cheoma --render <폴더>`: 화면 기록 권한 없이 노치 UI를 PNG로 그려서 레이아웃을 확인한다 (개발용).
@@ -38,11 +39,12 @@ enum PreviewRenderer {
         let alerts = [NotchAlert(symbol: "bolt.fill", tint: .green, text: "충전 중 90%"),
                       WarningAlerts.thermal(.critical), WarningAlerts.memory(.critical), WarningAlerts.battery(level: 10),
                       UpdateChecker.alert(for: UpdateChecker.sampleRelease), UpdateChecker.alert(for: AppRelease(
-                          tagName: "v10.10.10", name: nil, body: nil, htmlURL: UpdateChecker.latestURL, draft: false, prerelease: false))]
+                          tagName: "v10.10.10", body: nil, htmlURL: UpdateChecker.latestURL, draft: false, prerelease: false))]
         for (index, alert) in alerts.compactMap({ $0 }).enumerated() {
             model.previewAlert(alert)
             render(NotchView(model: model, stats: stats, fans: fans, agents: agents), to: folder.appendingPathComponent("alert-\(index).png"))
         }
+        renderDictation(model: model, stats: stats, fans: fans, agents: agents, folder: folder)
 
         for tab in DashboardTab.allCases {
             model.previewOpen(tab)
@@ -75,6 +77,19 @@ enum PreviewRenderer {
         }
         model.theme = .basic
 
+        // 펼친 대시보드에서 받아쓰는 중 (카메라 양옆 띠에 귀)
+        let openListening = DictationIndicator(stage: .listening, level: 0.4, text: "답장: 테스트도 통과했어요", handsFree: true)
+        for theme in [NotchTheme.basic, .gwanghwamun] {
+            model.theme = theme
+            model.previewOpen(.agents)
+            model.dictation = openListening
+            model.dictationLive.push(level: 0.7)
+            render(NotchView(model: model, stats: stats, fans: fans, agents: agents),
+                   to: folder.appendingPathComponent("dictation-open-\(theme == .basic ? "basic" : "gwanghwamun").png"))
+            model.dictation = nil
+        }
+        model.theme = .basic
+
         renderAgents(model: model, stats: stats, fans: fans, agents: agents, folder: folder)
         renderSettings(model: model, agents: agents, folder: folder)
         checkOverflow(model: model, stats: stats, fans: fans, agents: agents)
@@ -97,30 +112,98 @@ enum PreviewRenderer {
         }
     }
 
+    /// 받아쓰기 귀의 단계마다 (들은 글이 긴 것 · 손을 떼고 듣는 것 · 붙였어요 · 못 했어요)
+    private static func renderDictation(model: NotchModel, stats: StatsStore, fans: FanController, agents: AgentStore, folder: URL) {
+        let samples: [(name: String, indicator: DictationIndicator, levels: [Float])] = [
+            ("listening", DictationIndicator(stage: .listening, level: 0.25,
+                                             text: "Swift 코드에서 async await를 써서 API 호출 부분을 리팩터링해 줘"), [0.5, 0.8]),
+            ("listening-start", DictationIndicator(stage: .listening, level: 0.1), [0.2]),
+            ("handsfree", DictationIndicator(stage: .listening, level: 0.4, text: "GitHub에 push하고 PR 올려 줘", handsFree: true), [0.3, 0.6]),
+            ("handsfree-start", DictationIndicator(stage: .listening, level: 0.1, handsFree: true), []),
+            ("transcribing", DictationIndicator(stage: .transcribing, text: "Docker 컨테이너 로그를 확인해 줘"), []),
+            ("inserted", DictationIndicator(stage: .inserted("입력됨")), []),
+            ("inserted-clipboard", DictationIndicator(stage: .inserted("클립보드에 복사됨")), []),
+            ("failed", DictationIndicator(stage: .failed(DictationError.nothingHeard.message)), []),
+            ("failed-long", DictationIndicator(stage: .failed(DictationController.shortCopiedReason("보안 입력이 켜져 있어 클립보드에만 복사했습니다"))), []),
+            ("failed-headline", DictationIndicator(stage: .failed(DictationError.microphoneUnavailable("마이크 연결이 끊어졌습니다").headline)), []),
+            ("failed-engine", DictationIndicator(stage: .failed(DictationError.engineUnavailable(
+                "whisper 모델 파일(ggml-*.bin)을 찾을 수 없습니다. ~/models에 넣거나 설정에서 선택하십시오").headline)), []),
+        ]
+        // 귀가 있는 위쪽만 그린다
+        let canvas = CGSize(width: model.notchSize.width + NotchModel.dictationEarWidth * 2 + 80, height: model.notchSize.height + 30)
+        for sample in samples {
+            model.dictation = sample.indicator
+            for level in sample.levels { model.dictationLive.push(level: level) }
+            render(NotchView(model: model, stats: stats, fans: fans, agents: agents),
+                   to: folder.appendingPathComponent("dictation-\(sample.name).png"), canvas: canvas)
+        }
+        model.dictation = nil
+    }
+
     /// 설정 창의 탭마다. Form은 AppKit 뷰라 ImageRenderer 대신 창에 그려서 뜬다
     private static func renderSettings(model: NotchModel, agents: AgentStore, folder: URL) {
         // 업데이트 탭은 최신일 때와 새 버전이 있을 때
         let upToDate = UpdateChecker.preview(available: nil)
         let available = UpdateChecker.preview(available: UpdateChecker.sampleRelease)
+        // 받아쓰기 설정은 따로 둔 곳에 저장해서 이 맥의 설정을 건드리지 않는다
+        let suiteName = "io.github.m-kim77.cheoma.preview-dictation"
+        let dictationDefaults = UserDefaults(suiteName: suiteName) ?? .standard
+        defer { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
+        var sample = DictationSettings()
+        sample.isEnabled = true
+        sample.glossaryText = "# 우리 팀 용어\n체오마 → Cheoma\n트목스, 트웍스 → tmux\nSwiftData"
+        sample.save(to: dictationDefaults)
+        let dictation = previewDictation(model: model, defaults: dictationDefaults, microphone: .authorized, trusted: true)
         let variants: [(String, SettingsView.Tab, UpdateChecker)] = [
             ("general", .general, upToDate), ("agents", .agents, upToDate), ("accounts", .accounts, upToDate),
-            ("updates", .updates, upToDate), ("updates-available", .updates, available),
+            ("dictation", .dictation, upToDate), ("updates", .updates, upToDate), ("updates-available", .updates, available),
         ]
         for (name, tab, updates) in variants {
-            let hosting = NSHostingView(rootView: SettingsView(model: model, agents: agents, updates: updates,
-                                                               navigation: SettingsNavigation(tab: tab)))
-            let window = NSWindow(contentRect: CGRect(x: -6000, y: -6000, width: 560, height: 520),
-                                  styleMask: [.titled], backing: .buffered, defer: false)
-            window.contentView = hosting
-            window.orderFrontRegardless()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
-            guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { continue }
-            hosting.cacheDisplay(in: hosting.bounds, to: rep)
-            window.orderOut(nil)
-            let url = folder.appendingPathComponent("settings-\(name).png")
-            try? rep.representation(using: .png, properties: [:])?.write(to: url)
-            print("저장:", url.path)
+            snapshot(SettingsView(model: model, agents: agents, updates: updates, dictation: dictation,
+                                  navigation: SettingsNavigation(tab: tab)),
+                     size: CGSize(width: 560, height: 520), to: folder.appendingPathComponent("settings-\(name).png"))
         }
+        // 받아쓰기 탭 전체 (스크롤해야 보이는 아래쪽까지): Apple, 그리고 whisper · 권한 없음 · fn
+        snapshot(DictationSettingsTab(dictation: dictation).frame(width: 560, height: 1320),
+                 size: CGSize(width: 560, height: 1320), to: folder.appendingPathComponent("settings-dictation-full.png"))
+        sample.engine = .whisper
+        sample.hotKey = .fn
+        sample.whisperModelPath = "~/models/ggml-large-v3-turbo-q5_0.bin"
+        sample.save(to: dictationDefaults)
+        let whisper = previewDictation(model: model, defaults: dictationDefaults, microphone: .denied, trusted: false,
+                                       clipboard: .notAsked)
+        snapshot(DictationSettingsTab(dictation: whisper).frame(width: 560, height: 1480),
+                 size: CGSize(width: 560, height: 1480), to: folder.appendingPathComponent("settings-dictation-whisper-full.png"))
+    }
+
+    /// 마이크 · 단축키 · 붙여넣기는 쓰지 않는 받아쓰기 (설정 화면 그림용). 엔진 상태만 실제로 알아본다
+    private static func previewDictation(model: NotchModel, defaults: UserDefaults, microphone: AVAuthorizationStatus,
+                                         trusted: Bool, clipboard: DictationClipboardAccess = .allowed) -> DictationController {
+        let dependencies = DictationController.Dependencies(
+            audio: DictationAudioCapture(), makeEngine: DictationEngines.make,
+            insert: { _, _, _ in .failed("미리보기") },
+            microphoneStatus: { microphone }, requestMicrophone: { false }, accessibilityTrusted: { trusted },
+            modifiersHeld: { _ in false }, ownPanelIsKey: { false }, clipboardAccess: { clipboard })
+        let dictation = DictationController(notch: model, defaults: defaults, dependencies: dependencies)
+        dictation.refreshStatus()
+        // 엔진 상태(설치된 언어 모델 · whisper 파일)를 알아볼 때까지
+        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+        return dictation
+    }
+
+    /// 화면 밖 창에 띄워서 찍는다
+    private static func snapshot<V: View>(_ view: V, size: CGSize, to url: URL) {
+        let hosting = NSHostingView(rootView: view)
+        let window = NSWindow(contentRect: CGRect(x: -6000, y: -6000, width: size.width, height: size.height),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        window.orderOut(nil)
+        try? rep.representation(using: .png, properties: [:])?.write(to: url)
+        print("저장:", url.path)
     }
 
     /// 에이전트 탭의 여러 모습: tmux 세션(특수 키), 세션 없음, 새 에이전트 고르기, 연결 설정. 두 테마 모두

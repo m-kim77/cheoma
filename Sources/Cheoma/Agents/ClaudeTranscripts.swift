@@ -237,7 +237,8 @@ extension AgentUsageReader {
     }
 
     /// 비어 있지 않은 첫 줄을 100자까지
-    static func firstLine(_ text: String, limit: Int = 100) -> String? {
+    static func firstLine(_ text: String) -> String? {
+        let limit = 100
         for line in text.split(whereSeparator: \.isNewline) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty { continue }

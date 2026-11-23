@@ -62,10 +62,10 @@ struct HiddenItemsView: View {
                 Image(systemName: "hand.raised.fill")
                     .font(.system(size: 22))
                     .foregroundStyle(.orange)
-                Text("가려진 아이콘을 읽고 누르려면\n손쉬운 사용 권한이 필요해요")
+                Text("손쉬운 사용 권한 필요")
                     .font(.system(size: 12))
                     .multilineTextAlignment(.center)
-                Button("권한 허용하러 가기") { model.onRequestPermission?() }
+                Button("권한 허용…") { model.onRequestPermission?() }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
             }
@@ -78,13 +78,13 @@ struct HiddenItemsView: View {
                     guide
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
-                            section("숨겨질 아이콘 (| 왼쪽)", items: hidden, empty: "아직 없어요")
-                            section("보이는 아이콘", items: visible, empty: "모두 숨겨져 있어요")
+                            section("숨겨질 아이콘 (| 왼쪽)", items: hidden, empty: "없음")
+                            section("보이는 아이콘", items: visible, empty: "모두 숨겨짐")
                         }
                     }
                     .frame(maxHeight: 420)
                 } else if hidden.isEmpty {
-                    Text("가려진 아이콘이 없어요. 아이콘을 직접 숨기려면 정리를 눌러보세요.")
+                    Text("가려진 아이콘 없음")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 } else {
@@ -113,9 +113,9 @@ struct HiddenItemsView: View {
 
     private var guide: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label("메뉴바에서 ⌘ 누른 채 아이콘을 | 왼쪽으로 끌면 숨겨져요", systemImage: "command")
-            Label("꺼낼 때는 반대로 | 오른쪽으로 끌어 놓으세요", systemImage: "arrow.right")
-            Label("완료를 누르면 | 왼쪽 아이콘이 노치 뒤로 들어가요", systemImage: "checkmark")
+            Label("⌘를 누른 채 아이콘을 | 왼쪽으로 드래그하여 숨기기", systemImage: "command")
+            Label("| 오른쪽으로 드래그하여 다시 표시하기", systemImage: "arrow.right")
+            Label("완료를 클릭하여 | 왼쪽 아이콘을 노치 뒤로 숨기기", systemImage: "checkmark")
         }
         .font(.system(size: 10.5))
         .foregroundStyle(.secondary)

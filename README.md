@@ -31,9 +31,9 @@ Cheoma does the same for your MacBook's notch:
 
 Then turn on what you need:
 
-- **Hidden icons**: click `⌄` › **권한 허용하러 가기** (Allow access) and switch on Cheoma under Accessibility.
+- **Hidden icons**: click `⌄` › **권한 허용…** (Allow access…) and switch on Cheoma under Accessibility.
 - **Fan control**: open the dashboard › **팬** (Fans) tab › **도우미 설치** (Install helper), and enter an administrator password.
-- **Start at login**: right-click `⌄` › **로그인 시 자동 실행** (Launch at login).
+- **Start at login**: right-click `⌄` › **로그인 시 열기** (Open at login).
 
 ## Using Cheoma
 
@@ -49,7 +49,7 @@ Move the pointer onto the notch and the dashboard opens. Move away and it closes
 |---|---|
 | 개요 · Overview | CPU (per core), GPU, memory, power, network, storage |
 | 그래프 · Graphs | CPU, GPU, power and network over 1 min, 10 min, 1 h or 24 h. Hover for exact values. History survives restarts |
-| 전력 · Power | Whole system, CPU, GPU, Neural Engine, memory, display and other; battery health |
+| 전력 · Power | Whole system, CPU, GPU, Neural Engine, memory, display, rest of the SoC and other; battery health |
 | 온도 · Thermal | CPU, GPU, SSD and battery temperatures, fan RPM, 10-minute temperature graph |
 | 팬 · Fans | Fan control (below). Hidden on Macs without fans |
 | 앱 · Apps | Apps using the most CPU, CPU power and memory, with helper processes grouped into their app |
@@ -125,7 +125,7 @@ The **에이전트** (Agents) tab watches the coding agents running in your term
 - **Only the agents you use**: turn off any agent in Settings › 에이전트 and it leaves the session list, the launcher, the usage strip and alerts.
 - **New agent**: **+** starts an agent in a folder you pick, in a new tmux session. For Claude Code you can pick the account; by default it's the one with the most of its 5-hour limit left.
 - **Resume**: click a session under **최근 기록** (Recent) and choose **이어서 하기** (Resume). To move a conversation to another Claude account, for example when one runs out, choose that account instead. Cheoma copies the conversation there and leaves the original in place. Claude Code may ask whether you trust the folder the first time that account opens it.
-- **Resize**: drag the bottom-right corner of the tab. Double-click the corner to go back to the default size.
+- Drag the **크기 조절** (Resize) handle at the bottom right to set the tab’s width and height. The tab remembers its size the next time you open the app. Double-click the handle to restore the default.
 - **Text size**: the 가 buttons in the gear pane, or the Settings window, make the text 115%, 130% or 150% bigger. The tab grows with it. The terminal preview has its own size: **−** and **+** at its top-right corner go from **맞춤** (Fit, shrinks so the longest line fits) up to 20 pt, wrapping lines that don't fit.
 
 To set it up, click the gear button in the Agents tab:
@@ -146,10 +146,10 @@ Right-click `⌄` in the menu bar:
 | \| 왼쪽 아이콘 숨기기 | Hide icons left of \| |
 | 노치 알림 테스트 | Test notch alert |
 | 경고 알림 (과열·메모리·배터리) | Warning alerts (heat, memory, battery) |
-| 로그인 시 자동 실행 | Launch at login |
+| 로그인 시 열기 | Open at login |
 | 노치 모양 › 기본 / 광화문 | Notch shape › Basic / Gwanghwamun |
 | 설정… (⌘,) | Settings… : general, agents, accounts and updates in one window |
-| 새 버전 확인… | Check for updates… : checks now and opens Settings › 업데이트 (Updates) |
+| 업데이트 확인… | Check for updates… : checks now and opens Settings › 업데이트 (Updates) |
 | 종료 | Quit |
 
 ### Alerts from Terminal
@@ -171,7 +171,7 @@ make && /Applications/Cheoma.app/Contents/MacOS/Cheoma --notify "Build passed" -
 
 | Permission | Why | Where |
 |---|---|---|
-| Accessibility | To read and press menu bar icons hidden behind the notch | `⌄` › 권한 허용하러 가기, or System Settings › Privacy & Security › Accessibility |
+| Accessibility | To read and press menu bar icons hidden behind the notch | `⌄` › 권한 허용…, or System Settings › Privacy & Security › Accessibility |
 | Automation › Terminal | To read and answer agent sessions in Terminal.app tabs (only if you use the Agents tab) | Agents tab › gear › Terminal 연결 |
 | Administrator password, once | To install the fan helper, a small background service that runs as root and sets fan speeds | Fans tab › 도우미 설치 |
 
@@ -181,13 +181,13 @@ The dashboard, sensors and alerts need no permission.
 
 The only thing Cheoma sends over the network is the update check. Shortly after launch and then once a day, it asks GitHub for the latest release (`api.github.com/repos/m-kim77/cheoma/releases/latest`). The request carries the app name and version (`Cheoma/0.2.0`) and, like any web request, your IP address. Nothing else: no analytics, no accounts, and everything Cheoma measures stays on your Mac.
 
-To turn the check off, switch off **새 버전 확인** (Check for new versions) in Settings › 업데이트 (Updates). Cheoma then makes no network requests at all.
+To turn the check off, switch off **자동으로 업데이트 확인** (Check for updates automatically) in Settings › 업데이트 (Updates). Cheoma then makes no network requests at all.
 
 The Agents tab reads files the agents keep on your Mac (session status, conversation logs and the account and limit info they save) and terminal screens. It changes agent settings only when you click **모두 연결** (Connect all), and copies a conversation only when you resume it in another account.
 
 ## Update
 
-When a new version is out, a **새 버전 0.2.0** (New version) alert slides out of the notch once. Click it to open the release page. Settings › 업데이트 (Updates) shows what changed, with a **받기** (Download) button. **지금 확인** (Check now) there, or right-click `⌄` › **새 버전 확인…**, checks right away. If you turned the check off, click **Watch** › **Custom** › **Releases** at the top of this page instead.
+When a new version is out, a **새 버전 0.2.0** (New version) alert slides out of the notch once. Click it to open the release page. Settings › 업데이트 (Updates) shows what changed, with a **다운로드** (Download) button. **지금 확인** (Check now) there, or right-click `⌄` › **업데이트 확인…**, checks right away. If you turned the check off, click **Watch** › **Custom** › **Releases** at the top of this page instead.
 
 Cheoma doesn't install updates itself yet, because the app isn't notarized. Replace it by hand:
 
@@ -200,9 +200,9 @@ Your settings and graph history are kept. What changed in each version is in the
 
 ## Uninstall
 
-1. If you connected coding agents: Agents tab › gear › **연결 끊기** (Disconnect). Left in place, the hooks do nothing once the app is gone.
+1. If you connected coding agents: Settings › 에이전트 (Agents) › **연결 해제** (Disconnect). Left in place, the hooks do nothing once the app is gone.
 2. If you installed the fan helper: in the Fans tab, choose **자동** (Auto) and click **도우미 제거** (Remove helper) at the bottom right.
-3. Right-click `⌄`: turn off **로그인 시 자동 실행** if it is on, then click **종료**.
+3. Right-click `⌄`: turn off **로그인 시 열기** if it is on, then click **종료**.
 4. Move `Cheoma.app` to the Trash.
 5. To remove settings, graph history, the log and the permission entry:
 

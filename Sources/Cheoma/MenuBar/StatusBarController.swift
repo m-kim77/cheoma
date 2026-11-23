@@ -93,7 +93,7 @@ final class StatusBarController: NSObject {
         let test = NSMenuItem(title: "노치 알림 테스트", action: #selector(testAlert), keyEquivalent: "t")
         let warnings = NSMenuItem(title: "경고 알림 (과열·메모리·배터리)", action: #selector(toggleWarnings), keyEquivalent: "")
         warningsMenuItem = warnings
-        let login = NSMenuItem(title: "로그인 시 자동 실행", action: #selector(toggleLoginItem), keyEquivalent: "")
+        let login = NSMenuItem(title: "로그인 시 열기", action: #selector(toggleLoginItem), keyEquivalent: "")
         // 로그인 항목은 .app 번들로 실행할 때만 등록할 수 있다
         login.isHidden = Bundle.main.bundleIdentifier == nil
         loginMenuItem = login
@@ -107,10 +107,10 @@ final class StatusBarController: NSObject {
         }
         let themeItem = NSMenuItem(title: "노치 모양", action: nil, keyEquivalent: "")
         themeItem.submenu = themes
-        let help = NSMenuItem(title: "⌘ 누른 채 아이콘을 | 왼쪽으로 끌면 숨겨져요", action: nil, keyEquivalent: "")
+        let help = NSMenuItem(title: "⌘를 누른 채 아이콘을 | 왼쪽으로 드래그하여 숨기기", action: nil, keyEquivalent: "")
         help.isEnabled = false
         let settings = NSMenuItem(title: "설정…", action: #selector(openSettings), keyEquivalent: ",")
-        let updates = NSMenuItem(title: "새 버전 확인…", action: #selector(checkUpdates), keyEquivalent: "")
+        let updates = NSMenuItem(title: "업데이트 확인…", action: #selector(checkUpdates), keyEquivalent: "")
         let quit = NSMenuItem(title: "종료", action: #selector(quit), keyEquivalent: "q")
         for item in [showHidden, hide, test, warnings, login, themeItem, settings, updates, .separator(), help, .separator(), quit] {
             item.target = self

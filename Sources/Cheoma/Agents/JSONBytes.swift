@@ -151,12 +151,6 @@ struct JSONBytes {
     func isArray(_ range: Range<Int>) -> Bool { !range.isEmpty && base[range.lowerBound] == UInt8(ascii: "[") }
     func isTrue(_ range: Range<Int>) -> Bool { range.count == 4 && base[range.lowerBound] == UInt8(ascii: "t") }
 
-    /// 따옴표 안쪽 바이트 (이스케이프 그대로). 중복 제거용 해시에 쓴다
-    func rawString(_ range: Range<Int>) -> UnsafeRawBufferPointer? {
-        guard isString(range) else { return nil }
-        return UnsafeRawBufferPointer(start: base + range.lowerBound + 1, count: range.count - 2)
-    }
-
     /// 문자열 값을 디코딩한다. maxBytes를 주면 원문 앞부분만 디코딩한다 (긴 메시지의 첫 줄만 필요할 때)
     func string(_ range: Range<Int>, maxBytes: Int = .max) -> String? {
         guard isString(range) else { return nil }

@@ -6,14 +6,11 @@ struct ThermalStats: Equatable {
         var rpm: Double
         var minimum: Double
         var maximum: Double
-
-        var fraction: Double { maximum > minimum ? (rpm - minimum) / (maximum - minimum) : 0 }
     }
 
     var cpu: Double?
     var cpuMax: Double?
     var gpu: Double?
-    var gpuMax: Double?
     var ssd: Double?
     var battery: Double?
     var fans: [Fan] = []
@@ -61,10 +58,9 @@ final class ThermalSampler {
     func sample() -> ThermalStats? {
         guard let smc else { return nil }
         let cpu = readings(cpuKeys, smc)
-        let gpu = readings(gpuKeys, smc)
         return ThermalStats(
             cpu: Self.average(cpu), cpuMax: cpu.max(),
-            gpu: Self.average(gpu), gpuMax: gpu.max(),
+            gpu: Self.average(readings(gpuKeys, smc)),
             ssd: Self.average(readings(ssdKeys, smc)),
             battery: Self.average(readings(batteryKeys, smc)),
             fans: fans(smc)

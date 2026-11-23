@@ -168,14 +168,14 @@ enum HookInstaller {
                              environment: [String: String] = ProcessInfo.processInfo.environment) throws {
         let codexHome = AgentUsageReader.codexHome(home: home, environment: environment)
         guard FileManager.default.fileExists(atPath: codexHome.path) else {
-            throw AgentBridgeError(message: "Codex 설정 폴더가 없어요. Codex를 한 번 실행한 뒤 다시 해 주세요")
+            throw AgentBridgeError(message: "Codex 설정 폴더가 없습니다. Codex를 한 번 실행한 후 다시 시도하십시오.")
         }
         let file = codexHome.appendingPathComponent("config.toml")
         let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
         switch codexStatus(config: text) {
         case .installed: return
         case .occupied(let other):
-            throw AgentBridgeError(message: "Codex notify에 이미 다른 프로그램이 있어요 (\(other)). 건드리지 않았어요")
+            throw AgentBridgeError(message: "다른 프로그램이 Codex notify 사용 중 (\(other)) · 변경하지 않음")
         case .notInstalled, .unavailable:
             break
         }
@@ -261,7 +261,7 @@ enum HookInstaller {
     private static func readSettings(_ file: URL) throws -> [String: Any] {
         guard FileManager.default.fileExists(atPath: file.path) else { return [:] }
         guard let settings = readJSON(file) else {
-            throw AgentBridgeError(message: "\(file.path)을 읽을 수 없어서 고치지 않았어요")
+            throw AgentBridgeError(message: "\(file.path)을 읽을 수 없어 변경하지 않음")
         }
         return settings
     }

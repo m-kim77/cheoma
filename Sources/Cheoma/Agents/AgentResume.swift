@@ -69,7 +69,7 @@ enum AgentResume {
                 if newest == nil || date > newest!.date { newest = (file, date) }
             }
         }
-        guard let source = newest?.url else { throw AgentBridgeError(message: "이 세션의 대화 기록을 찾지 못했어요") }
+        guard let source = newest?.url else { throw AgentBridgeError(message: "대화 기록 없음") }
         let projects = URL(fileURLWithPath: configDir).appendingPathComponent("projects")
         // 이미 그 계정의 기록이 가장 새것이다
         if source.path.hasPrefix(projects.standardizedFileURL.path + "/") { return }
@@ -98,13 +98,13 @@ enum AgentResume {
                 if newest == nil || date > newest!.date { newest = (file, date) }
             }
         }
-        guard let source = newest?.url else { throw AgentBridgeError(message: "이 세션의 대화 기록을 찾지 못했어요") }
+        guard let source = newest?.url else { throw AgentBridgeError(message: "대화 기록 없음") }
         let sessions = URL(fileURLWithPath: codexHome).appendingPathComponent("sessions").standardizedFileURL
         // 이미 그 계정의 기록이 가장 새것이다
         if source.path.hasPrefix(sessions.path + "/") { return }
         // sessions/ 아래 경로(YYYY/MM/DD/파일)를 그대로 쓴다
         guard let range = source.path.range(of: "/sessions/", options: .backwards) else {
-            throw AgentBridgeError(message: "Codex 기록 위치를 알 수 없어요")
+            throw AgentBridgeError(message: "Codex 기록 위치를 알 수 없음")
         }
         let destination = sessions.appendingPathComponent(String(source.path[range.upperBound...]))
         try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)

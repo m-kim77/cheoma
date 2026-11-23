@@ -74,11 +74,6 @@ enum AgentScanner {
         return Date(timeIntervalSince1970: TimeInterval(time.tv_sec) + TimeInterval(time.tv_nsec) / 1e9)
     }
 
-    /// 프로세스가 아직 살아 있는지
-    static func isAlive(_ pid: pid_t) -> Bool {
-        kill(pid, 0) == 0
-    }
-
     // MARK: - 종류 가리기 (순수 함수: `--agents --selftest`에서 확인)
 
     /// 바로 실행되는 에이전트 실행 파일 이름

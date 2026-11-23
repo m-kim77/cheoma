@@ -18,6 +18,10 @@ enum Gwanghwamun {
         (contentWidth + margin * 2) / (baseHalf * 2)
     }
 
+    static func contentWidth(frameWidth: CGFloat) -> CGFloat {
+        frameWidth / designWidth * (baseHalf * 2) - margin * 2
+    }
+
     static func frameSize(content: CGSize) -> CGSize {
         let k = scale(contentWidth: content.width)
         return CGSize(width: designWidth * k, height: roofHeight * k + margin + content.height + archBand * k)

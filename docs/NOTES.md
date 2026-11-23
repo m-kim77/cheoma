@@ -35,7 +35,7 @@
 | 디스크 여유 | `volumeAvailableCapacityForImportantUsage` | Finder와 같은 기준. 느려서 1분에 한 번 |
 | 시스템 전력 | SMC `PSTR` | 실시간. 배터리 레지스트리 값은 1분에 한 번 정도만 바뀐다 |
 | 어댑터 입력 | SMC `PDTR` | |
-| 구성요소 전력 | IOReport "Energy Model" (`dlopen`) | CPU·GPU·ANE·DRAM·DISP. 단위가 mJ/uJ/nJ로 섞여 있다 |
+| 구성요소 전력 | IOReport "Energy Model" (`dlopen`) | CPU·GPU·ANE·메모리(DRAM+DCS+AMCC)·DISP·SoC 기타(AFR+FAB). 단위가 mJ/uJ/nJ로 섞여 있다. 합계는 SMC의 SoC 레일(`PHPS`)과 거의 같다 (M5 Max에서 91.9W / 92.6W). DISP는 디스플레이 컨트롤러뿐이고 백라이트는 안 들어간다 |
 | 온도 | SMC `Tp*`(CPU), `Tg*`(GPU), `TH0x`(SSD), `TB*T`(배터리) | GPU 키는 84개라 고르게 8개만 읽는다 |
 | 팬 | SMC `F{n}Ac` / `F{n}Mn` / `F{n}Mx` | 현재 / 최소 / 최대 RPM |
 | 배터리 | AppleSmartBattery 레지스트리 | 10초에 한 번, 충전기를 꽂거나 빼면 바로. 어댑터 정격도 그때 같이 |
@@ -139,8 +139,13 @@
 - 찾은 방법: `sample <pid>`에서 메인 스레드가 `NSHostingView.layout` → `ViewGraph.beginNextUpdate` → `propagate_dirty`만 돌고 있었고, 우리 body는 거의 다시 계산되지 않았다. 호스팅 뷰의 `layout()`을 세어 보니 초당 수만 번이었다.
 - 기록에 한 번 더하기: 그래프가 예전 기록을 들고 있으면 바뀌는 항목의 배열(1시간치 3600점)을 통째로 복사하지만, 항목 하나에 0.003ms(tick당 약 0.03ms)라 그대로 둔다.
 - 센서 한 번 읽기: IOReport(구성요소별 전력) 4ms, 온도 35개 4.5~6.5ms(SMC 키 하나에 약 0.19ms), 앱별 사용량 1.2ms, 나머지는 0.03ms 이하. 그래서 온도와 IOReport는 열려 있으면 2초, 닫혀 있으면 4초마다만 읽는다. 에너지는 누적값의 차이라 간격이 길어도 그 사이 평균은 정확하다.
-- IOReport는 "Energy Model" 그룹 전체(수백 채널)가 아니라 쓰는 채널(CPU·GPU·ANE·DRAM·DISP)만 구독하고, 채널 이름은 처음 한 번만 해석한다 (예전엔 매번 정규식을 새로 만들었다).
+- IOReport는 "Energy Model" 그룹 전체(수백 채널)가 아니라 쓰는 채널(CPU·GPU·ANE·DRAM·DCS·AMCC·DISP·AFR·FAB)만 구독하고, 채널 이름은 처음 한 번만 해석한다 (예전엔 매번 정규식을 새로 만들었다).
 - 노치 그림자는 검은 모양에만 단다. 원인은 아니었지만 내용 전체에 다는 것보다 낫다.
+- 닫은 창도 SwiftUI 뷰는 계속 돈다 (11/20): 설정 창을 한 번 열었다 닫으면 대기 CPU가 2~4%였다 (켠 지 15시간 47분, 20초 `sample`에서 일한 0.5초 중 0.25~0.3초가 닫힌 설정 창의 `SettingsView.body`).
+  - `isReleasedWhenClosed = false`로 창을 들고 있으면 `NSHostingController`의 뷰가 `@ObservedObject`를 계속 구독한다. 화면에 없어도 탭 네 개를 다 다시 계산한다 (`AppKitTabView`가 탭마다 크기를 잰다). 그래서 닫을 때 창을 놓고 다음에 새로 만든다.
+  - `@Published`는 같은 값을 넣어도 `objectWillChange`를 보낸다. `AgentStore.apply`가 3초마다 `sessions`를 새로 대입해서 바뀐 게 없어도 다시 그렸다. 화면을 새로 읽으면 `TerminalScreen.capturedAt`만 달라져도 다른 값이 되므로 글자가 같으면 예전 것을 둔다. 대신 "5분 전" 같은 글자가 멈추지 않게 30초마다 한 번은 보낸다.
+  - 다시 그릴 때마다 `Picker`(`AgentKind` 태그)가 만드는 SwiftUI 내부 객체(`TagIndexProjection` · 딕셔너리 둘)가 풀리지 않고 쌓였다: `heap <pid>`로 33초 사이 12,047 → 12,057개(3초에 하나), 약 4MB. 안 그리면 안 쌓인다.
+  - 그때 메모리: footprint 156~167MB, 살아 있는 힙 69MB, 나머지 약 77MB는 풀렸지만 malloc이 들고 있는 것. 최고 454MB는 원인을 못 찾았다 (켤 때 Claude 기록 2,904개 · 3.5GB를 처음 훑을 때로 짐작).
 - 그 전(10/28): 대기 CPU 3~4% → 0.5~0.8%. 원인은 디스크 여유 공간 계산, GPU 온도 키 84개, 배터리 레지스트리 전체 읽기였다.
 
 ## 빌드 / 권한
@@ -153,3 +158,76 @@
 - 빌드는 `nice`와 동시 작업 2개로 돌린다 (팬 소음을 줄이려고).
 - Swift는 15바이트 이하의 짧은 문자열 리터럴을 코드 안에 바로 넣는다. 그래서 바이너리를 `grep`해도 짧은 문자열은 안 나온다. 새 코드가 빌드에 들어갔는지 볼 때는 긴 문자열로 찾는다.
 - 실행 중인 앱은 `kill -TERM <pid>`로 끄면 기록을 저장하고 끝난다. `caffeinate -w <pid>`로 꺼질 때까지 기다린 뒤 새로 설치하고 `open`한다.
+
+## 노치 확장 조사 (2026-11-23)
+
+아직 만들지 않은 기능이 macOS 26.7에서 되는지 알아본 것.
+
+- **지금 재생 중**: macOS 15.4부터 `mediaremoted`가 엔타이틀먼트를 확인해서, 일반 앱은 MediaRemote 비공개 프레임워크로 재생 정보를 못 읽는다. `/usr/bin/perl`은 그 권한이 있어서, perl로 작은 dylib를 불러 읽는 방식(오픈 소스 `ungive/mediaremote-adapter`. 가져다 쓰기 전에 라이선스를 확인한다)이 15.4 이상에서도 동작한다고 알려져 있다. 26.1에서 읽기는 되지만 재생 명령 보내기는 막혔다는 제보가 하나 있다 (확인 못 함). 명령이 막히면 미디어 키 이벤트(`NX_KEYTYPE_PLAY` 등)로 대신한다. Apple이 또 막을 수 있으니 실패하면 귀를 숨기고, Music·Spotify는 AppleScript로 되돌아간다. 브라우저의 유튜브도 Media Session으로 "지금 재생"에 올라오니 따로 할 일이 없다.
+- **AirDrop 받기**: 받기 요청에 끼어드는 공개 API는 없다. 요청은 알림 센터 알림으로 뜨므로, 알림 센터 프로세스(`com.apple.notificationcenterui`)에 AX 관찰자를 달아 새 알림 창을 보고, 제목이 AirDrop이면 노치에 띄우고 "수락" 버튼을 `AXPress`로 누르는 방법뿐이다. 이미 가진 손쉬운 사용 권한으로 되지만, 알림 창 구조·버튼 이름(언어마다 다름)이 macOS 버전마다 바뀔 수 있다. 실제 AirDrop을 받아 AX 트리를 떠 봐야 한다. 받은 뒤는 다운로드 폴더를 FSEvents로 보고 AirDrop으로 온 파일인지는 확장 속성(`kMDItemWhereFroms`, 격리 속성의 보낸 앱)으로 가릴 수 있는지 아직 확인 못 했다.
+- **실행기**: macOS 26 Spotlight가 앱·파일·동작·클립보드 기록(⌘1~4)과 빠른 키를 갖게 돼서, 그대로 따라 만들면 차이가 없다. Cheoma만 할 수 있는 것(에이전트에 답 보내기, 팬·타이머, 로컬 LLM에 묻기)을 앞에 둔다. 앱 목록은 `NSMetadataQuery`(`kMDItemContentType == com.apple.application-bundle`), 단축키는 워크트리의 Carbon `HotKey`(손쉬운 사용 권한 필요 없음), 창은 포커스를 빼앗지 않는 `NSPanel`(`.nonactivatingPanel`)로, 글자를 칠 때만 key window가 되게 한다.
+- **로컬 LLM**: Foundation Models는 이 맥에서 `available`, `supportsLocale(ko-KR) == true`, 한 문장 답 1.7초. 다만 "노치"를 하드웨어로 알아듣는 등 지식이 약하고 컨텍스트가 4,096토큰이라, 도구 고르기(타이머 맞춰 · 팬 올려 · 앱 열어)와 짧은 요약에 쓴다. 도구는 3~5개 넘게 주지 말라는 게 Apple 권고다. 긴 대화·질문은 LM Studio·Ollama(`LocalModels.swift`가 이미 찾음)의 OpenAI 호환 API로 보내거나, `mlx-swift-lm`으로 앱 안에 모델을 넣는다 (Qwen3 계열 도구 호출 지원). 128GB 맥이라 큰 모델도 되지만 배포판 사용자를 생각해 기본은 Foundation Models.
+- **음성**: `SpeechTranscriber`는 이 맥에서 한국어를 지원하고 `ko_KR` 모델이 이미 설치돼 있다. 마이크 권한이 새로 필요하다. "시리야" 같은 호출어는 늘 마이크를 켜 둬야 해서 하지 않고, 단축키를 누르고 말하는 방식으로 한다. 답을 읽어 줄 땐 `AVSpeechSynthesizer`.
+
+## 음성 받아쓰기 · 음성으로 LLM (2026-11-23 조사)
+
+Spokenly처럼 말한 걸 붙여넣는 것과, 말한 걸 바로 LLM·에이전트에 넣는 것. 구독(Claude · ChatGPT · Gemini)을 API 키 없이 쓸 수 있는지도 봤다. 회사 약관은 11월에 바뀐 것까지 원문으로 확인했다.
+
+### 구독으로 LLM 쓰기
+
+| | 앱이 직접 부르기 | 공식 CLI를 뒤에서 (`-p` · `exec`) | tmux의 대화형 CLI에 넣기 (지금 방식) |
+|---|---|---|---|
+| ChatGPT | **된다.** "Sign in with ChatGPT" 플랜 사용(2026-09 DevDay). 오픈 소스·로컬 앱은 신청 없이 된다 (`client_id=dynamic_agent_client`, PKCE, 127.0.0.1 콜백) | 된다. 로컬·비상업 앱은 `codex exec --json`, `codex app-server`(stdio JSON-RPC, 실험) 허용 | 된다 |
+| Claude | 안 된다. 토큰을 꺼내 쓰는 건 금지이고 서버에서 막는다 | 회색, 배포 앱이면 금지 쪽. 로그인 도움말(11/22): "다른 사람을 위한 앱이면 API 키". 이용 정책(11/12): "소비자 구독으로 요청을 보내는 서비스" 금지 | 된다. 사용자가 자기 계정으로 수정 안 한 Claude Code를 쓰는 것 |
+| Gemini · Antigravity | 안 된다. 다른 도구로 로그인 재사용 시 계정 정지 사례(2026-02) | 안 된다. FAQ: 제3자 앱이 `agy -p`를 감싸는 건 소비자 플랜에서 지원 안 함 | 사용자가 직접 한 말만. 프로그램이 만든 글 · 자동 Enter는 안 됨 (포럼 답변) |
+
+- ChatGPT 플랜 사용의 조건: Go·Plus·Pro·Business. Responses API만, `stream: true` · `store: false` 필수, system 역할 대신 `instructions`. 음성 입력 · 전사 API는 안 된다. 한도는 Codex와 같은 "ChatGPT Work · Codex" 몫에서 나가고 앱별 주간 한도(%)가 있다. 화면에 "Continue with ChatGPT" 버튼, "Using ChatGPT plan" 표시, "Manage usage"(ChatGPT 설정 › 사용량) 링크를 둬야 한다. 유료 · 호스팅 앱은 대기 명단.
+- Claude를 깨끗하게 쓰는 길: Max($100) · Ultra($200) · Team은 매달 API 크레딧이 있어서 Console API 키로 부르면 추가 비용이 없다 (Pro는 없음). 키는 Cheoma 키체인에 둔다. 뒤에서 `claude -p`를 쓰더라도 `--bare`는 구독 로그인을 안 읽어서 못 쓰고(`--safe-mode`를 쓴다), 문서에 "-p의 기본이 `--bare`가 된다"고 예고돼 있다. 첫 응답까지 3~6초(이슈 제보, 직접 재지 않음).
+- Google AI Pro · Ultra에는 매달 Google Cloud 크레딧이 붙어서 AI Studio의 Gemini API 키로 쓸 수 있다 ($5 선결제 필요, 금액은 출처마다 다름). Gemini CLI는 2026-06-18부터 구독 사용자를 받지 않는다.
+- 각 CLI에 자체 음성 입력이 생겼다: Claude Code `/voice`(한국어 `ko`, 한도에서 안 빠짐, 음성은 서버에서 전사), agy `/voice dictate`(F5), Copilot CLI. tmux에서 띄운 CLI 안에서 쓰는 거라 약관 걱정이 없다.
+- 에이전트에 말 넣는 공식 통로: `codex queue --thread <ID> --message <글>`, `claude agents --json`(상태 읽기, `~/.claude/jobs`는 안정된 인터페이스가 아님). 없으면 지금처럼 tmux `paste-buffer -p`.
+- 지금 코드에서 걸리는 것: `AntigravityQuota`의 `agy -p /usage`(모델은 안 부르지만 위 FAQ에 걸릴 수 있음), `~/.codex/auth.json`의 id_token을 읽는 것(밖으로 보내지는 않음, app-server `account/read` · `account/rateLimits/read`로 바꿀 수 있음).
+
+### 받아쓰기 엔진 (한국어 + 영어 개발 용어)
+
+- 이 맥에서 합성 음성(`say -v Yuna` 등)으로 쟀다. 실제 목소리보다 쉽다. 용어집(도커→Docker 등)을 양쪽에 똑같이 적용한 CER: whisper.cpp large-v3-turbo + 용어 프롬프트 **4.5%**, whisper.cpp 10.3%, SpeechTranscriber 18.4%, DictationTranscriber + contextualStrings 21.1%, DictationTranscriber 26.0%.
+- Apple SpeechAnalyzer: 내려받을 것 없음(ko_KR 설치됨), 키를 뗀 뒤 최종 글까지 SpeechTranscriber 25~40ms, DictationTranscriber 100~230ms. SpeechTranscriber는 영어 용어를 한글로 쓰고 contextualStrings를 무시한다. contextualStrings는 100개 · 한두 단어까지. DictationTranscriber `.shortForm`은 파일 모드 ko_KR에서 빈 글을 낸다(스트리밍은 됨). `AssetInventory.status`는 앱이 locale을 예약해야 `.installed`가 된다.
+- whisper.cpp(MIT): 9초에 0.34초, 메모리 약 0.93GB. `~/models/ggml-large-v3-turbo-q5_0.bin`(574MB)과 `/opt/homebrew/bin/whisper-cli` 1.9.5가 이미 있다.
+- Qwen3-ASR(Apache-2.0, Swift 포트 speech-swift · mlx-audio-swift)는 자체 발표 FLEURS-ko CER 2.57이지만, 독립 비교(BuzzASR)에서는 Whisper-large-v3 5.72 대 Qwen3-ASR-1.7B 7.39. 실제 녹음으로 비교하기 전엔 기본으로 하지 않는다. Parakeet은 한국어가 없다. SenseVoice는 라이선스가 GPL과 맞지 않을 수 있다.
+- 구독으로 전사하는 길은 없다 (ChatGPT 플랜은 전사 제외, Claude `/voice`는 Claude Code 안에서만). 전사는 로컬에서 한다.
+
+### 단축키 · 마이크 · 붙여넣기
+
+- 단축키: 오른쪽 ⌥ 누르고 있기를 기본으로 (flagsChanged, keyCode 61 + `NX_DEVICERALTKEYMASK`, 150~200ms 뒤 시작, 다른 키가 눌리면 취소). NSEvent 전역+로컬 모니터나 listen-only CGEventTap 모두 이미 있는 손쉬운 사용 권한으로 된다 (Apple DTS, 2026-05). Carbon `RegisterEventHotKey`는 키 떼기는 알지만 수식키 하나만으로는 못 건다. Fn은 이 맥에서 이모지 창(`TISGetFnUsageType` = 2)이고, 한국 사용자는 입력 전환에 많이 써서 선택지로만 둔다.
+- 마이크: 지금 Cheoma는 hardened runtime인데 `com.apple.security.device.audio-input` 권한과 `NSMicrophoneUsageDescription`이 없어서 마이크가 조용히 막힌다. Speech 프레임워크를 쓰면 `NSSpeechRecognitionUsageDescription`도 있어야 한다. ad-hoc 릴리스는 업데이트마다 마이크 권한도 다시 받아야 한다. 블루투스 헤드셋 마이크를 열면 음질이 떨어지니 내장 마이크를 먼저 쓰고 키를 누르는 동안만 연다. macOS 26에서 블루투스 마이크로 `installTap`이 안 불린다는 제보가 있어 AUHAL이나 AVCaptureSession을 쓴다.
+- 붙여넣기 순서: ① Cheoma 패널이 key면 Cheoma 입력란 ② Cheoma가 아는 tmux 에이전트 칸이면 `TmuxBridge.send` ③ 확인된 네이티브 앱이면 AX `kAXSelectedTextAttribute`로 쓰고 다시 읽어 확인 ④ 클립보드(transient · current-host 표시) + ⌘V. 2벌식에서도 ⌘V 키코드는 9로 맞다 ⑤ Chromium 155~156(이 맥에서는 Claude 데스크톱 Electron 45.3.3, Brave)은 ⌘V가 가끔 씹혀서 메뉴의 "붙여넣기"를 AX로 누른다. 메뉴는 "편집"/"수정"처럼 이름이 달라서 키 조합(⌘V)으로 찾는다.
+- 한글 입력기(2벌식) 상태에서 유니코드 글자 치기는 위험하다. 조합 중인 글자가 있을 때 어떻게 되는지는 아직 시험 못 했다.
+- 클립보드 되돌리기는 `accessBehavior == .alwaysAllow`일 때만, 내 것인지는 `changeCount` · types로 본다 (내용을 읽으면 macOS의 "다른 앱에서 붙여넣기" 경고가 뜰 수 있다. 이 맥에도 설정 항목이 있다). 만든 뒤에 알아낸 것은 아래 "받아쓰기 구현".
+- 참고 코드: VoiceInk(GPL-3.0, 붙여넣기 · 선택 글 읽기 · 로컬 CLI 공급자), FluidVoice(GPL-3.0, 노치 UI · 명령 모드), OpenWhispr(MIT). VoiceInk의 메뉴 찾기는 영어 제목("Edit"/"Copy")이라 한국어 맥에서 안 된다.
+
+### 다른 받아쓰기 앱
+
+- 다들 갖춘 것: 누르고 말하기 + 두 번 눌러 계속 듣기, Esc 취소, 로컬·클라우드 엔진, 붙여넣고 클립보드 되돌리기, 마지막 결과 다시 붙이기, 용어집, 모드(프롬프트 + 선택 글 · 클립보드 · 앱 · 화면 글자, 앱별 자동 전환).
+- 에이전트 쪽: Spokenly 2.18+ MCP(`ask_user_dictation`) · CLI · 동작, Superwhisper는 에이전트마다 훅 플러그인, Aqua "send it". 모두 에이전트마다 뭔가를 깔아야 한다. Cheoma는 이미 화면을 읽고 tmux로 보내서 설치 없이 된다 (음성으로 선택지 답하기, 계정 골라 에이전트 띄우기).
+- 구독 로그인을 받는 받아쓰기 앱은 없다. API 키, 자체 모델, CLI 하위 프로세스(VoiceInk), 브라우저로 넘기기(`chatgpt.com/?q=`, `claude.ai/new?q=`, 채우기만 하고 보내지는 않음)뿐이다.
+- 이 맥의 Spokenly는 App Store판 2.16.0(2026-01)이라 자동 붙여넣기 · MCP · CLI가 없다. 최신 직접 배포판은 2.35.16. ChatGPT 앱(`com.openai.codex`)에도 전역 받아쓰기가 있다.
+
+### 받아쓰기 구현 (11/23)
+
+조사 뒤 만든 것에서 알아낸 것. 코드는 `Sources/Cheoma/Dictation/`, 부품끼리의 약속은 `DictationModels.swift`.
+
+- 흐름: 단축키를 누르면(armed) 바로 마이크를 열고 소리를 모아 둔다 (첫 음절). 0.15초 넘게 누르고 있으면(began) 그때 엔진을 시작하고 모은 소리를 차례대로 넘긴다. 톡 친 것 · ⌥← 같은 단축키는 엔진을 건드리지 않는다 (Apple 분석기를 ⌥마다 새로 만들지 않게). 키를 떼면 0.12초 더 듣고 마무리한다. 엔진 호출은 한 줄로 세운다: 앞 말의 finish가 끝나야 다음 말의 begin을 부르고, 그동안 새 말은 큐에 모은다.
+- 블루투스 마이크가 기본 입력이면 began에서 연다 (누를 때마다 헤드셋이 통화 음질로 바뀌지 않게). 내장 마이크를 쓰도록 하면 AUHAL의 `kAudioOutputUnitProperty_CurrentDevice`를 엔진 시작 전에 바꾼다. 마이크가 2초 동안 버퍼를 하나도 안 주면 멈춘 것으로 본다 (macOS 26 블루투스에서 `installTap`이 안 불린다는 제보 대비).
+- 엔진 시간 (이 맥, 합성 음성): DictationTranscriber 첫 중간 글 0.5초, 키를 뗀 뒤 최종 글 약 0.05초(섞어 말한 문장은 0.2~0.25초). whisper-cli는 말 하나마다 새로 띄워도 모델 포함 0.35~0.45초라 whisper-server를 쓰지 않는다 (서버는 0.12~0.15초지만 메모리를 계속 잡는다). Apple 기본은 DictationTranscriber: contextualStrings를 받고 첫 글이 SpeechTranscriber의 두 배 빠르다. 섞어 말한 개발 용어("GitHub에 push하고")는 여전히 whisper가 훨씬 낫다.
+- `AppleSpeechEngine.prepare`는 ko-KR을 예약한다 (AssetInventory 예약 칸 5개 중 1개). `SpeechModels.endRetention()`은 프로세스 전체에 걸린다.
+- whisper.cpp는 `--prompt`가 길면 앞을 자르고 끝을 남긴다. 그래서 용어를 중요한 순서로 고른 뒤 거꾸로 이어서 사용자 용어가 끝에 오게 한다 (500바이트).
+- 용어집: 한글로 끝나는 패턴은 뒤에 조사 · 어미("를", "에서", "니까" …)가 오거나 글이 끝날 때만 바꾼다. "고랭지" → "Golang지", "러스트벨트" → "Rust벨트" 같은 오변환을 막는다. "자바라"는 구별할 수 없어 "Java라"가 된다.
+- Esc: 듣는 동안만 `cgSessionEventTap` + `.defaultTap`(손쉬운 사용 권한으로 됨)을 달아 Esc를 삼킨다. 탭은 자기 스레드 · 자기 런루프에서 돌고, 삼킬지는 잠금으로 지킨 값으로 탭 스레드에서 바로 정한다. 메인 런루프에 두면 Cheoma가 바쁠 때 시스템 전체 키 입력이 늦어진다. 떼는 일도 탭 스레드에서 한다 (`CFRunLoopPerformBlock`: 끄기 → 소스 빼기 → 포트 무효 → 런루프 멈춤).
+- 붙이기 전에 수식키가 모두 떨어질 때까지 기다린다 (⌥를 누른 채면 ⌘V가 ⌥⌘V가 된다). 다음 받아쓰기 단축키를 누르고 있으면 그 키를 뗄 때까지 기다리고, 끝내 안 떨어지면 클립보드에만 넣는다. 우리가 보낸 ⌘V에는 `eventSourceUserData` 표시를 달아 단축키 감시가 사용자 키로 보지 않는다.
+- 클립보드 되돌리기 (`NSPasteboard.accessBehavior`): macOS 26은 처음에 `.default`(물어봄)라 읽으면 경고가 뜬다. 그래서 `.alwaysAllow`일 때만 떠 두고 되돌린다. 15.4~15.x는 경고를 띄우지 않아 `.default`도 허용으로 본다 (15.x 기계에서 확인은 못 함). 그림 · PDF · 파일 약속(promise) · 8MB 넘는 것 · Concealed · Transient · 1Password 항목은 떠 두지 않는다 (다시 써 넣으면 암호 관리자의 자동 지우기가 무력해지고 클립보드 기록 앱이 새 복사로 본다). 되돌리기는 0.8초 뒤. 앱이 느리거나(AX `.cannotComplete`) 글 칸이 아니면 되돌리지 않고 받아쓴 글을 남긴다.
+- 보안 입력: `IsSecureEventInputEnabled()`는 시스템 전체라 한 앱이 켜 두면 모든 앱에 붙여넣기가 막힌다. `CGSessionCopyCurrentDictionary()`의 `kCGSSessionSecureInputPID`로 건 앱을 보고, 붙여 넣을 앱이 건 것이거나 모를 때만 클립보드에만 넣는다. 그때는 `.currentHostOnly` + Concealed로 넣는다 (다른 기기로 동기화되지 않게).
+- 띄어쓰기: 손쉬운 사용으로 커서 앞 글자(`kAXSelectedTextRangeAttribute` + `kAXStringForRangeParameterizedAttribute`)를 읽어 정한다. 모르면(터미널 등) 같은 앱 · 30초 안 · 그사이 사용자가 키를 안 쳤을 때만 띄운다. 일본어 · 중국어는 띄우지 않는다. AX 호출에는 0.25초 제한(`AXUIElementSetMessagingTimeout`)을 걸고 메인 스레드 밖에서 한다.
+- fn(지구본) 키의 동작은 `com.apple.HIToolbox`의 `AppleFnUsageType`: 0 안 함, 1 입력 소스 바꾸기, 2 이모지, 3 받아쓰기(macOS 받아쓰기는 두 번 누르기라 손 떼고 듣기와 겹친다). 한국어 macOS 26의 설정 이름은 "🌐︎ 키를 누를 때 실행할 동작" › "안 함".
+- 화면 잠금 · `screensDidSleep` · `willSleep` · 사용자 전환이면 듣던 것을 버린다. 듣는 동안은 IOPM `PreventUserIdleDisplaySleep`을 잡아 손 떼고 듣는 중에 화면이 꺼져 버려지지 않게 한다.
+- 노치: 소리 크기 · 중간 글은 `DictationLiveState`(귀 뷰만 지켜봄)로 보내서 초당 20번 바뀌어도 `NotchModel`은 바뀌지 않는다 (테스트로 확인). 받아쓰기 귀는 단계가 바뀔 때만 `NotchModel.dictation`을 바꾼다.
+- 아직 실제로 못 본 것: 진짜 마이크 · 다른 앱에 붙여 넣기 전부, 크롬 · Electron에서 한글 조합 중 메뉴 붙여넣기 (조합이 남는지 · 겹치는지. 문제면 입력기가 조합 모드일 때는 ⌘V로), Safari 웹 페이지의 AX 선택 범위, 15.x의 `accessBehavior` 값, Apple 언어 모델 내려받기(`downloadAssets`), SpeechAnalyzer가 음성 인식 TCC를 묻는지.

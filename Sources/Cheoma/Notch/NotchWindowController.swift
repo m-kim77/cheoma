@@ -42,9 +42,9 @@ final class NotchWindowController {
         let clickView = AlertClickView()
         clickView.onClick = { [weak self] in self?.alertClicked() }
         alertClickPanel.contentView = clickView
-        // 값이 바뀌기 직전에 불리므로 넘어온 값으로 판단한다
-        model.$alert.combineLatest(model.$isOpen)
-            .map { alert, isOpen in !isOpen && alert?.url != nil }
+        // 값이 바뀌기 직전에 불리므로 넘어온 값으로 판단한다. 받아쓰는 동안은 귀가 받아쓰기 것이라 누를 수 없다
+        model.$alert.combineLatest(model.$isOpen, model.$dictation)
+            .map { alert, isOpen, dictation in !isOpen && dictation == nil && alert?.url != nil }
             .removeDuplicates()
             .sink { [weak self] clickable in self?.setAlertClickable(clickable) }
             .store(in: &cancellables)
@@ -67,7 +67,10 @@ final class NotchWindowController {
             .removeDuplicates()
             .sink { [weak self] _ in
                 // 값이 바뀐 다음 차례에 (sink는 바뀌기 직전에 불린다)
-                DispatchQueue.main.async { self?.layout() }
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, let screen = self.screen else { return }
+                    self.resizePanel(on: screen)
+                }
             }
             .store(in: &cancellables)
 
@@ -127,11 +130,15 @@ final class NotchWindowController {
         model.notchSize = Self.notchSize(of: screen)
         model.screenSize = screen.frame.size
         model.fitAgentsToScreen()
+        resizePanel(on: screen)
+        updateVirtualNotch()
+    }
+
+    private func resizePanel(on screen: NSScreen) {
         let frame = screen.frame
         let size = windowSize
         let target = CGRect(x: frame.midX - size.width / 2, y: frame.maxY - size.height, width: size.width, height: size.height)
         if panel.frame != target { panel.setFrame(target, display: true) }
-        updateVirtualNotch()
     }
 
     /// 노치 없는 화면에서는 메뉴바 가운데에 검은 가상 노치를 그린다. 메뉴바가 숨으면(전체화면 영상 등)

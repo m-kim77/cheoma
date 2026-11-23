@@ -11,20 +11,7 @@ enum AgentsStyle {
         case .hermes: .text("☤")
         case .antigravity: .arch
         case .gemini: .text("✦")
-        case .aider: .symbol(symbol(kind))
-        }
-    }
-
-    static func symbol(_ kind: AgentKind) -> String {
-        switch kind {
-        case .claude: "asterisk"
-        case .codex: "chevron.left.forwardslash.chevron.right"
-        case .opencode: "curlybraces"
-        case .pi: "pi"
-        case .hermes: "wind"
-        case .antigravity: "arrow.up.to.line.compact"
-        case .gemini: "sparkles"
-        case .aider: "wrench.and.screwdriver"
+        case .aider: .symbol("wrench.and.screwdriver")
         }
     }
 

@@ -32,7 +32,7 @@ enum StatsDump {
         }
         if let p = s.power {
             let c = p.components
-            lines.append("POWER system \(Format.watts(p.systemWatts)) cpu \(Format.watts(c?.cpu)) gpu \(Format.watts(c?.gpu)) ane \(Format.watts(c?.ane)) dram \(Format.watts(c?.dram)) disp \(Format.watts(c?.display))")
+            lines.append("POWER system \(Format.watts(p.systemWatts)) cpu \(Format.watts(c?.cpu)) gpu \(Format.watts(c?.gpu)) ane \(Format.watts(c?.ane)) mem \(Format.watts(c?.memory)) disp \(Format.watts(c?.display)) soc \(Format.watts(c?.soc))")
             lines.append("BATT \(p.batteryLevel)% plugged \(p.isPluggedIn) charging \(p.isCharging) battery \(Format.watts(p.batteryWatts)) adapter \(p.adapterRatedWatts.map { "\($0)W" } ?? "-") in \(Format.watts(p.adapterInputWatts)) health \(Format.percent(p.health)) cycles \(p.cycleCount ?? -1) temp \(p.temperature ?? -1)")
         }
         if let t = s.thermal {

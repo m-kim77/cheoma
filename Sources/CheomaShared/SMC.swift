@@ -51,11 +51,6 @@ public final class SMC {
         IOServiceClose(connection)
     }
 
-    /// 키가 있는지 (형식은 상관없이)
-    public func hasKey(_ key: String) -> Bool {
-        keyInfo(Self.fourCC(key)) != nil
-    }
-
     /// 실수형(flt) 키 값. 키가 없거나 형식이 다르면 nil.
     public func float(_ key: String) -> Float? {
         let code = Self.fourCC(key)

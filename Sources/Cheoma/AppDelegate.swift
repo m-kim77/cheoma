@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let systemEvents = SystemEventMonitor()
     private let warnings = WarningAlerts()
     private let updates = UpdateChecker()
+    private var dictation: DictationController?
     private var notifyObserver: NSObjectProtocol?
     private var terminationSource: DispatchSourceSignal?
     private var cancellables = Set<AnyCancellable>()
@@ -48,7 +49,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusBar.currentTheme = { [weak self] in self?.notchModel.theme ?? .basic }
         statusBar.onSelectTheme = { [weak self] theme in self?.notchModel.theme = theme }
-        let settings = SettingsWindowController(model: notchModel, agents: agents, updates: updates)
+        // 단축키를 누르고 말하면 쓰던 앱에 붙여 넣는다 (설정에서 켰을 때만 단축키를 듣는다)
+        let dictation = DictationController(notch: notchModel)
+        dictation.start()
+        self.dictation = dictation
+        let settings = SettingsWindowController(model: notchModel, agents: agents, updates: updates, dictation: dictation)
         statusBar.onOpenSettings = { [weak settings] in settings?.show() }
         // 지금 확인하고, 결과가 보이는 설정 창 › 업데이트를 연다
         statusBar.onCheckUpdates = { [weak self] in
@@ -113,5 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 수동 팬 모드였다면 자동으로 돌려놓고, 그래프 기록을 저장하고 끝낸다
         fans.restoreAutomaticBeforeQuit()
         stats.saveHistory(synchronously: true)
+        // 마이크를 닫고 whisper 프로세스 · Apple 음성 모델을 놓는다
+        dictation?.shutdown()
     }
 }

@@ -17,10 +17,13 @@ final class NotchModel: ObservableObject {
         case closed    // 실제 노치와 같은 크기 (안 보임)
         case hovering  // 마우스가 다가오면 살짝 커짐
         case alert     // 노치 양옆으로 귀가 생기며 아이콘/텍스트 표시
+        case dictation // 받아쓰는 중: 귀에 마이크와 들은 글 (알림보다 앞, 펼침보다 뒤)
         case open      // 아래로 크게 펼쳐짐
     }
 
     static let earWidth: CGFloat = 100
+    /// 받아쓰기 귀는 들은 글이 몇 낱말 보이도록 알림 귀보다 넓다
+    static let dictationEarWidth: CGFloat = 150
     /// 창은 가장 큰 탭·테마에 맞춰 한 번만 만들어 두고, 모양만 탭 크기로 바뀐다
     static let maxOpenSize: CGSize = {
         let basic = DashboardTab.allCases.map(\.openSize)
@@ -30,6 +33,10 @@ final class NotchModel: ObservableObject {
     private static let tabDefaultsKey = "dashboardTab"
     private static let openDelay: TimeInterval = 0.18
     static let alertDuration: TimeInterval = 2.8
+    /// 받아쓰는 동안 가려져 있던 알림을 귀가 사라진 뒤 적어도 이만큼 보여 준다
+    static let alertDurationAfterDictation: TimeInterval = 2
+    /// alertDurationAfterDictation (테스트에서 줄인다)
+    var alertDurationAfterDictation = NotchModel.alertDurationAfterDictation
 
     @Published var notchSize = CGSize(width: 185, height: 32)
     /// 노치 없는 화면에서 메뉴바가 숨었을 때(전체화면 등) 닫힌 가상 노치를 그리지 않는다
@@ -51,18 +58,31 @@ final class NotchModel: ObservableObject {
     /// true인 동안은 마우스가 벗어나도 닫지 않는다 (에이전트에 보낼 답을 입력하는 중)
     @Published var keepsOpen = false
 
-    /// 에이전트 탭 크기. 오른쪽 아래 모서리를 끌어 키운다 (가장 작게는 기본 크기)
-    @Published private(set) var agentsSize = NotchModel.savedAgentsSize {
-        didSet { UserDefaults.standard.set(NSStringFromSize(agentsSize), forKey: Self.agentsSizeKey) }
+    /// 받아쓰기 표시. 단계가 바뀔 때만 바꾼다. 소리 크기 · 중간 글은 dictationLive로 보낸다:
+    /// 여기서 초당 20번 바꾸면 노치 전체(펼친 대시보드까지)를 그때마다 다시 그린다
+    @Published var dictation: DictationIndicator? {
+        didSet {
+            if (dictation == nil) != (oldValue == nil) { dictationCoverChanged() }
+            guard let dictation, dictation != oldValue else { return }
+            dictationLive.reset(level: dictation.level, text: dictation.text)
+        }
     }
-    /// 에이전트 탭 글자 크기. 키우면 탭도 그만큼 커진다 (가장 작은 크기가 기본 크기 × 배율)
+    /// 받아쓰는 동안 자주 바뀌는 값. 귀 뷰만 지켜본다
+    let dictationLive = DictationLiveState()
+
+    /// 에이전트 탭 크기 (화면에 맞춘 실제 크기). 늘 `agentsBaseSize × 글자 배율`을 화면에 맞춘 값이다
+    @Published private(set) var agentsSize: CGSize
+    /// 보통 글자(100%) 기준 탭 크기. 오른쪽 아래 모서리를 끌면 바뀌고, 글자 크기를 바꿔도 그대로라서
+    /// 글자를 키웠다 줄이면 창도 원래 크기로 돌아온다
+    private var agentsBaseSize: CGSize {
+        didSet { UserDefaults.standard.set(NSStringFromSize(agentsBaseSize), forKey: Self.agentsBaseSizeKey) }
+    }
+    /// 에이전트 탭 글자 크기. 키우면 탭도 그만큼 커지고 줄이면 그만큼 작아진다
     @Published var agentsTextScale = NotchModel.savedTextScale {
         didSet {
             UserDefaults.standard.set(agentsTextScale.rawValue, forKey: AgentsTextScale.defaultsKey)
             guard agentsTextScale != oldValue else { return }
-            // 글자가 커진 만큼 탭도 키운다 (줄일 때는 사용자가 키워 둔 크기를 남긴다)
-            let ratio = agentsTextScale.rawValue / oldValue.rawValue
-            resizeAgents(to: ratio > 1 ? CGSize(width: agentsSize.width * ratio, height: agentsSize.height * ratio) : agentsSize)
+            applyAgentsSize()
         }
     }
 
@@ -70,23 +90,44 @@ final class NotchModel: ObservableObject {
         AgentsTextScale(rawValue: UserDefaults.standard.double(forKey: AgentsTextScale.defaultsKey)) ?? .normal
     }
 
-    /// 에이전트 탭 기본 크기 (글자 크기 배율을 곱한 것). 이보다 작게는 줄일 수 없다
-    var agentsMinimumSize: CGSize {
-        let base = DashboardTab.agents.openSize
-        let scale = agentsTextScale.rawValue
+    /// 보통 글자에서 머리줄과 두 열을 함께 쓸 수 있는 최소 크기. 기본 크기보다 작게도 끌 수 있다
+    static let compactAgentsSize = CGSize(width: 680, height: 310)
+    static func agentsMinimumSize(scale: Double) -> CGSize {
+        let base = compactAgentsSize
         return CGSize(width: (base.width * scale).rounded(), height: (base.height * scale).rounded())
     }
 
     /// 모서리를 끄는 중 (마우스가 노치 밖으로 나가도 닫지 않는다)
     @Published var isResizing = false
     /// 노치가 있는 화면 크기 (에이전트 탭을 얼마나 키울 수 있는지)
-    var screenSize = CGSize(width: 1512, height: 982)
-    private static let agentsSizeKey = "agents.size"
+    var screenSize = NotchModel.defaultScreenSize
+    private static let defaultScreenSize = CGSize(width: 1512, height: 982)
+    private static let agentsBaseSizeKey = "agents.baseSize"
+    /// 예전 버전이 저장한 실제 크기 (글자 배율이 곱해진 값). 처음 한 번 기준 크기로 옮긴다
+    private static let legacyAgentsSizeKey = "agents.size"
 
-    private static var savedAgentsSize: CGSize {
-        guard let text = UserDefaults.standard.string(forKey: agentsSizeKey) else { return DashboardTab.agents.openSize }
-        let size = NSSizeFromString(text)
-        return size.width > 0 && size.height > 0 ? size : DashboardTab.agents.openSize
+    init() {
+        let scale = Self.savedTextScale.rawValue
+        let base = Self.savedAgentsBaseSize(scale: scale)
+        agentsBaseSize = base
+        agentsSize = Self.agentsSize(base: base, scale: scale, screen: Self.defaultScreenSize, theme: NotchTheme.saved)
+    }
+
+    private static func savedAgentsBaseSize(scale: Double) -> CGSize {
+        let defaults = UserDefaults.standard
+        if let text = defaults.string(forKey: agentsBaseSizeKey) {
+            let size = NSSizeFromString(text)
+            if size.width > 0, size.height > 0 { return size }
+        }
+        if let text = defaults.string(forKey: legacyAgentsSizeKey) {
+            let size = NSSizeFromString(text)
+            if size.width > 0, size.height > 0, scale > 0 {
+                let base = CGSize(width: size.width / scale, height: size.height / scale)
+                defaults.set(NSStringFromSize(base), forKey: agentsBaseSizeKey)
+                return base
+            }
+        }
+        return DashboardTab.agents.openSize
     }
 
     /// 탭마다 펼친 크기 (에이전트 탭만 사용자가 바꾼다)
@@ -94,23 +135,52 @@ final class NotchModel: ObservableObject {
         tab == .agents ? agentsSize : tab.openSize
     }
 
-    /// 에이전트 탭 크기를 바꾼다. 기본 크기보다 작게, 화면보다 크게는 안 된다
+    /// 모서리를 끌어서 직접 고른 크기를 보통 글자 기준으로 저장한다
     func resizeAgents(to size: CGSize) {
-        let clamped = Self.clampAgents(size, minimum: agentsMinimumSize, screen: screenSize, theme: theme)
-        if clamped != agentsSize { agentsSize = clamped }
+        let scale = agentsTextScale.rawValue
+        let clamped = Self.clampAgents(size, minimum: Self.agentsMinimumSize(scale: scale), screen: screenSize, theme: theme)
+        guard clamped != agentsSize else { return }
+        agentsBaseSize = CGSize(width: clamped.width / scale, height: clamped.height / scale)
+        agentsSize = clamped
     }
 
-    /// 화면이나 노치 모양이 바뀌었을 때 지금 크기를 다시 맞춘다
+    func resetAgentsSize() {
+        agentsBaseSize = DashboardTab.agents.openSize
+        applyAgentsSize()
+    }
+
+    /// 끌어서 바꾼 적이 없거나 기본 크기로 되돌린 상태 (설정의 "기본 크기로"를 끈다)
+    var isAgentsSizeDefault: Bool {
+        abs(agentsBaseSize.width - DashboardTab.agents.openSize.width) < 1
+            && abs(agentsBaseSize.height - DashboardTab.agents.openSize.height) < 1
+    }
+
+    /// 화면이나 노치 모양이 바뀌었을 때 지금 크기를 다시 맞춘다 (기준 크기는 그대로 둬서 화면이 커지면 되살아난다)
     func fitAgentsToScreen() {
-        resizeAgents(to: agentsSize)
+        applyAgentsSize()
     }
 
-    static func clampAgents(_ size: CGSize, minimum: CGSize = DashboardTab.agents.openSize, screen: CGSize, theme: NotchTheme) -> CGSize {
-        let width = min(max(size.width, minimum.width), max(screen.width - 160, minimum.width))
-        // 광화문은 폭에 따라 지붕이 커지니 그만큼 낮게
+    private func applyAgentsSize() {
+        let size = Self.agentsSize(base: agentsBaseSize, scale: agentsTextScale.rawValue, screen: screenSize, theme: theme)
+        if size != agentsSize { agentsSize = size }
+    }
+
+    /// 기준 크기 × 글자 배율을 화면에 맞춘 실제 탭 크기
+    static func agentsSize(base: CGSize, scale: Double, screen: CGSize, theme: NotchTheme) -> CGSize {
+        clampAgents(CGSize(width: base.width * scale, height: base.height * scale),
+                    minimum: agentsMinimumSize(scale: scale), screen: screen, theme: theme)
+    }
+
+    static func clampAgents(_ size: CGSize, minimum: CGSize = compactAgentsSize, screen: CGSize, theme: NotchTheme) -> CGSize {
+        // 여유가 있는 화면에는 여백을 남기고, 작은 화면에서는 손잡이와 지붕까지 화면 안에 둔다.
+        let fullWidth = theme == .gwanghwamun ? Gwanghwamun.contentWidth(frameWidth: screen.width) : screen.width
+        let preferredWidth = theme == .gwanghwamun ? Gwanghwamun.contentWidth(frameWidth: screen.width - 160) : screen.width - 160
+        let maxWidth = max(1, min(fullWidth, max(minimum.width, preferredWidth)).rounded(.down))
+        let width = min(max(size.width.rounded(), minimum.width), maxWidth)
         let roof = theme == .gwanghwamun ? Gwanghwamun.frameSize(content: CGSize(width: width, height: 0)).height : 0
-        let height = min(max(size.height, minimum.height), max(screen.height - 120 - roof, minimum.height))
-        return CGSize(width: width.rounded(), height: height.rounded())
+        let fullHeight = screen.height - roof
+        let maxHeight = max(1, min(fullHeight, max(minimum.height, fullHeight - 120)).rounded(.down))
+        return CGSize(width: width, height: min(max(size.height.rounded(), minimum.height), maxHeight))
     }
 
     /// 펼쳤을 때 모양 전체의 크기
@@ -139,6 +209,8 @@ final class NotchModel: ObservableObject {
 
     private var openWork: DispatchWorkItem?
     private var alertWork: DispatchWorkItem?
+    /// 지금 알림을 띄울 시간
+    private var alertDurationLeft: TimeInterval = 0
     /// 알림이 떠 있는 동안 노치에 마우스를 올리면 열 탭 (에이전트 알림 → 에이전트 탭)
     private var alertTab: DashboardTab?
     /// 지금 알림이 끝나면 띄울 알림들 (얼마나 띄울지, 마우스를 올리면 열 탭과 함께)
@@ -153,6 +225,7 @@ final class NotchModel: ObservableObject {
 
     var phase: Phase {
         if isOpen { return .open }
+        if dictation != nil { return .dictation }
         if alert != nil { return .alert }
         if isHovering { return .hovering }
         return .closed
@@ -163,6 +236,7 @@ final class NotchModel: ObservableObject {
         case .closed: notchSize
         case .hovering: CGSize(width: notchSize.width + 18, height: notchSize.height + 4)
         case .alert: CGSize(width: notchSize.width + Self.earWidth * 2, height: notchSize.height)
+        case .dictation: CGSize(width: notchSize.width + Self.dictationEarWidth * 2, height: notchSize.height)
         case .open: openSize
         }
     }
@@ -186,7 +260,8 @@ final class NotchModel: ObservableObject {
             guard let self else { return }
             self.openWork = nil
             guard self.isHovering else { return }
-            if self.alert != nil, let tab = self.alertTab { self.tab = tab }
+            // 받아쓰기 귀에 가려 보이지 않는 알림의 탭으로는 열지 않는다
+            if self.alert != nil, self.dictation == nil, let tab = self.alertTab { self.tab = tab }
             self.isOpen = true
         }
         openWork = work
@@ -199,11 +274,19 @@ final class NotchModel: ObservableObject {
         isOpen = true
     }
 
+    /// 미리보기 렌더링 · 테스트용: 펼친 대시보드를 닫는다
+    func previewClose() {
+        isOpen = false
+        isHovering = false
+    }
+
+    #if DEBUG
     /// 미리보기 렌더링용: 차례를 건너뛰고 바로 띄운다
     func previewAlert(_ alert: NotchAlert) {
         self.alert = alert
         alertTab = nil
     }
+    #endif
 
     /// 알림 칸은 하나다. 경고는 정보성 알림을 밀어내고 바로 뜨고, 정보성 알림은 경고가 끝날 때까지 기다린다.
     /// 경고끼리는 차례로 띄운다. 정보성 알림끼리는 새 것이 바로 바꾼다 (충전기를 꽂았다 뺐을 때처럼 마지막 상태가 중요하다)
@@ -228,10 +311,27 @@ final class NotchModel: ObservableObject {
     private func present(_ item: PendingAlert) {
         alert = item.alert
         alertTab = item.tab
+        alertDurationLeft = item.duration
+        scheduleAlertEnd(after: item.duration)
+    }
+
+    /// 받아쓰는 동안은 알림이 귀에 가려 보이지 않으니 시간을 세지 않는다 (귀가 사라지면 그때부터 센다)
+    private func scheduleAlertEnd(after duration: TimeInterval) {
         alertWork?.cancel()
+        alertWork = nil
+        guard dictation == nil else { return }
         let work = DispatchWorkItem { [weak self] in self?.alertFinished() }
         alertWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + item.duration, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
+    }
+
+    private func dictationCoverChanged() {
+        if dictation != nil {
+            alertWork?.cancel()
+            alertWork = nil
+        } else if alert != nil {
+            scheduleAlertEnd(after: max(alertDurationLeft, alertDurationAfterDictation))
+        }
     }
 
     /// 누를 수 있는 알림을 눌렀을 때: 바로 닫고 다음 알림으로 넘어간다 (주소는 창 쪽에서 연다)
@@ -250,5 +350,30 @@ final class NotchModel: ObservableObject {
             return
         }
         present(pendingAlerts.remove(at: index))
+    }
+}
+
+/// 받아쓰는 동안 자주 바뀌는 값 (소리 크기 · 중간 글). 노치 귀 뷰만 지켜봐서 바뀌어도 귀만 다시 그린다
+final class DictationLiveState: ObservableObject {
+    /// 소리 크기 막대 수. 가운데가 가장 새 값이고 양옆으로 지난 값이 퍼져 나간다
+    static let barCount = 5
+    /// 지난 소리 크기 (뒤가 가장 새 값)
+    @Published private(set) var levels = [Float](repeating: 0, count: (DictationLiveState.barCount + 1) / 2)
+    @Published var text = ""
+
+    var level: Float { levels.last ?? 0 }
+
+    /// 새 소리 크기. 눈에 띄지 않을 만큼만 바뀌었으면 다시 그리지 않는다
+    func push(level: Float) {
+        let rounded = (min(max(level, 0), 1) * 40).rounded() / 40
+        guard rounded != self.level || levels.contains(where: { $0 != rounded }) else { return }
+        levels = Array(levels.dropFirst()) + [rounded]
+    }
+
+    func reset(level: Float, text: String) {
+        let rounded = (min(max(level, 0), 1) * 40).rounded() / 40
+        let filled = [Float](repeating: rounded, count: levels.count)
+        if levels != filled { levels = filled }
+        if self.text != text { self.text = text }
     }
 }

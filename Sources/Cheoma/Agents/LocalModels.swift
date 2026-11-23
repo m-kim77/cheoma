@@ -3,7 +3,7 @@ import Foundation
 
 /// 이 맥에서 도는 로컬 모델 서버 하나 (Ollama, LM Studio, Unsloth Studio, llama.cpp)
 struct LocalModelServer: Equatable, Sendable {
-    enum Kind: String, CaseIterable, Sendable {
+    enum Kind: String, Sendable {
         case ollama, lmStudio, unsloth, llamaCpp
 
         var displayName: String {

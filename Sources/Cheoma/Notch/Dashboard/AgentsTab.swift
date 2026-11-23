@@ -23,39 +23,47 @@ enum AgentsPane: Equatable {
 struct AgentsTab: View {
     @ObservedObject var store: AgentStore
     let model: NotchModel
-    @State private var pane = AgentsTab.previewPane ?? .session
+    @Environment(\.agentsScale) private var scale
     /// 잠깐 보여주는 알림 (store.message)
     @State private var banner: String?
-    /// `--render`에서 새 에이전트 · 설정 화면을 그릴 때 쓴다
-    static var previewPane: AgentsPane?
     static let listWidth: CGFloat = 232
     #if DEBUG
+    @State private var pane = AgentsTab.previewPane ?? .session
+    /// `--render`에서 새 에이전트 · 설정 화면을 그릴 때 쓴다
+    static var previewPane: AgentsPane?
     /// `--click-test`가 버튼이 눌렸는지 본다
     static var debugPane: AgentsPane?
+    #else
+    @State private var pane = AgentsPane.session
     #endif
 
     var body: some View {
         let sessions = store.sessions
         let selected = store.selectedSession
-        VStack(spacing: 8) {
+        VStack(spacing: 0) {
             AgentsUsageStrip(usage: store.visibleUsage, pane: $pane)
-            HStack(alignment: .top, spacing: 10) {
-                AgentsSessionList(sessions: sessions, recorded: store.recordedSessions,
-                                  selectedID: pane.recordID == nil ? selected?.id : nil, selectedRecordID: pane.recordID) { id in
-                    store.select(id)
-                    pane = .session
-                } onSelectRecord: { id in
-                    pane = .record(id)
-                }
-                .agentsFrame(width: Self.listWidth)
-                detail(selected)
+                .padding(.bottom, 8)
+            GeometryReader { area in
+                HStack(alignment: .top, spacing: 10) {
+                    AgentsSessionList(sessions: sessions, recorded: store.recordedSessions,
+                                      selectedID: pane.recordID == nil ? selected?.id : nil, selectedRecordID: pane.recordID) { id in
+                        store.select(id)
+                        pane = .session
+                    } onSelectRecord: { id in
+                        pane = .record(id)
+                    }
+                    .frame(width: min(Self.listWidth * scale, area.size.width * 0.33))
+                    // 작은 높이에서도 답 입력과 선택지까지 스크롤할 수 있게 한다.
+                    ScrollView(.vertical) {
+                        detail(selected)
+                            .frame(minHeight: area.size.height, idealHeight: area.size.height)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
                     .overlay(alignment: .bottom) { bannerView }
+                }
             }
-        }
-        // 오른쪽 아래 모서리: 끌어서 크기 바꾸기 (아래 여백 자리에 둔다)
-        .overlay(alignment: .bottomTrailing) {
             AgentsResizeGrip(model: model)
-                .offset(x: 14, y: 14)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         // 글자 칸의 글자 · 커서 색이 시스템 밝은 모드를 따라 검게 되지 않도록
         .environment(\.colorScheme, .dark)
@@ -119,46 +127,140 @@ struct AgentsTab: View {
     }
 }
 
-/// 에이전트 탭 크기 바꾸기 손잡이. 끌면 노치가 양옆과 아래로 커진다 (가운데에 붙어 있어서 가로는 끈 만큼의 두 배).
-/// 끄는 동안 창 크기가 바뀌어 뷰 좌표가 흔들리므로 화면 좌표(마우스 위치)로 잰다. 두 번 누르면 기본 크기
-struct AgentsResizeGrip: View {
+/// 두 테마에서 같은 자리에 놓이는 크기 조절 손잡이. 내용이 스크롤되어도 늘 보인다.
+private struct AgentsResizeGrip: View {
     let model: NotchModel
-    @State private var start: (mouse: CGPoint, size: CGSize)?
-    @State private var isHovering = false
+    /// 마우스가 올라가 있거나 끄는 중
+    @State private var isActive = false
 
     var body: some View {
-        Canvas { context, size in
-            for inset in [3.0, 7.0, 11.0] {
-                var path = Path()
-                path.move(to: CGPoint(x: size.width - 2, y: inset))
-                path.addLine(to: CGPoint(x: inset, y: size.height - 2))
-                context.stroke(path, with: .color(.white.opacity(isHovering || start != nil ? 0.7 : 0.3)), lineWidth: 1.2)
+        Label("크기 조절", systemImage: "arrow.up.left.and.arrow.down.right")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.white.opacity(isActive ? 1 : 0.8))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+            .background(.white.opacity(isActive ? 0.2 : 0.1), in: Capsule())
+            .frame(minWidth: 88, minHeight: 28)
+            // 마우스는 위에 덮은 AppKit 뷰가 받으므로 올라감도 거기서 알려 준다
+            .overlay { AgentsResizeTarget(model: model) { isActive = $0 } }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("에이전트 탭 크기 조절")
+            .accessibilityAction(named: "기본 크기로") { model.resetAgentsSize() }
+    }
+}
+
+/// 키 창이 아닌 노치에서도 첫 마우스 누름부터 추적한다. 창 자체가 움직이므로 델타는 화면 좌표로 잰다.
+private struct AgentsResizeTarget: NSViewRepresentable {
+    let model: NotchModel
+    let onActive: (Bool) -> Void
+
+    func makeNSView(context: Context) -> GripView { GripView() }
+    func updateNSView(_ view: GripView, context: Context) {
+        view.model = model
+        view.onActive = onActive
+    }
+
+    final class GripView: NSView {
+        weak var model: NotchModel?
+        var onActive: ((Bool) -> Void)?
+        private var start: (point: CGPoint, size: CGSize)?
+        private var isInside = false
+
+        private static var resizeCursor: NSCursor {
+            if #available(macOS 15, *) { .frameResize(position: .bottomRight, directions: .all) } else { .openHand }
+        }
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            toolTip = "드래그하여 크기 조절 · 이중 클릭하여 기본 크기로"
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        // 커서 영역은 키 창에서만 쓰인다. 노치는 보통 키 창이 아니어서 들어오고 나갈 때 직접 바꾼다
+        override func resetCursorRects() {
+            super.resetCursorRects()
+            addCursorRect(bounds, cursor: Self.resizeCursor)
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach(removeTrackingArea)
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                           owner: self))
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            isInside = true
+            updateActive()
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            isInside = false
+            updateActive()
+        }
+
+        private func updateActive() {
+            let active = isInside || start != nil
+            onActive?(active)
+            (active ? Self.resizeCursor : .arrow).set()
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            guard let model, let window else { return }
+            if event.clickCount == 2 {
+                model.resetAgentsSize()
+                return
+            }
+            start = (window.convertPoint(toScreen: event.locationInWindow), model.agentsSize)
+            model.isResizing = true
+            updateActive()
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            guard let start, let model, let window else { return }
+            let point = window.convertPoint(toScreen: event.locationInWindow)
+            // 노치가 가운데 고정이라 한쪽 끝을 끈 거리의 두 배만큼 폭이 바뀐다.
+            let width = start.size.width + 2 * (point.x - start.point.x)
+            var height = start.size.height + start.point.y - point.y
+            if model.theme == .gwanghwamun {
+                // 폭을 바꾸면 지붕 높이도 바뀐다. 손잡이의 세로 위치는 마우스를 따라가야 한다.
+                let fitted = NotchModel.clampAgents(CGSize(width: width, height: height),
+                                                    minimum: NotchModel.agentsMinimumSize(scale: model.agentsTextScale.rawValue),
+                                                    screen: model.screenSize, theme: model.theme)
+                height -= Gwanghwamun.contentTop(content: fitted) - Gwanghwamun.contentTop(content: start.size)
+            }
+            model.resizeAgents(to: CGSize(width: width, height: height))
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            if start != nil {
+                mouseDragged(with: event)
+                endDrag()
             }
         }
-        .frame(width: 14, height: 14)
-        .padding(4)
-        .contentShape(Rectangle())
-        .onHover { isHovering = $0 }
-        .gesture(
-            DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                .onChanged { _ in
-                    let mouse = NSEvent.mouseLocation
-                    if start == nil {
-                        start = (mouse, model.agentsSize)
-                        model.isResizing = true
-                    }
-                    guard let start else { return }
-                    // 화면 좌표는 위로 갈수록 y가 크다
-                    model.resizeAgents(to: CGSize(width: start.size.width + (mouse.x - start.mouse.x) * 2,
-                                                  height: start.size.height + (start.mouse.y - mouse.y)))
-                }
-                .onEnded { _ in
-                    start = nil
-                    model.isResizing = false
-                }
-        )
-        .simultaneousGesture(TapGesture(count: 2).onEnded { model.resizeAgents(to: model.agentsMinimumSize) })
-        .help("끌어서 크기 바꾸기 · 두 번 누르면 기본 크기")
-        .accessibilityLabel("에이전트 창 크기")
+
+        override func viewWillMove(toWindow newWindow: NSWindow?) {
+            // 끄는 도중 탭이 사라지면 끌기를 끝낸다. SwiftUI가 뷰를 치우는 중이라 모델은 다음 차례에 바꾼다
+            if newWindow == nil, start != nil {
+                start = nil
+                isInside = false
+                DispatchQueue.main.async { [weak model] in model?.isResizing = false }
+            }
+            super.viewWillMove(toWindow: newWindow)
+        }
+
+        private func endDrag() {
+            guard start != nil else { return }
+            start = nil
+            model?.isResizing = false
+            // 창 밖에서 놓았으면 나감 알림이 이미 지나갔으므로 지금 마우스 위치로 다시 판단한다
+            if let window {
+                isInside = bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
+            }
+            updateActive()
+        }
     }
 }

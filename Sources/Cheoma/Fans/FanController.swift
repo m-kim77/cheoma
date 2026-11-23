@@ -339,7 +339,7 @@ final class FanController: ObservableObject {
             updateKeepAlive()
             return
         }
-        fail("도우미에 연결하지 못했어요. 다시 설치해보세요.", detail: error.localizedDescription)
+        fail("도우미에 연결할 수 없습니다. 다시 설치하십시오.", detail: error.localizedDescription)
     }
 
     /// 도우미가 거절하거나 팬이 따라오지 않으면 자동으로 돌리고 이유를 보여준다.
@@ -419,8 +419,8 @@ final class FanController: ObservableObject {
             fixedRPMs = fanLimits.indices.map { normalized(fanLimits[$0].lowerBound, fan: $0) }
             UserDefaults.standard.set(fixedRPMs, forKey: Key.fixedRPMs)
         }
-        fail(stopping ? "이 맥은 팬을 직접 멈출 수 없어요. 자동으로 되돌렸어요 (시원할 때는 macOS가 알아서 멈춰요)."
-                      : "팬이 설정한 속도로 바뀌지 않았어요. 이 맥은 수동 팬 제어를 받아들이지 않는 것 같아 자동으로 되돌렸어요.")
+        fail(stopping ? "이 Mac에서는 팬을 멈출 수 없습니다. 자동으로 되돌렸습니다."
+                      : "팬이 설정한 속도로 바뀌지 않아 자동으로 되돌렸습니다.")
     }
 
     // MARK: - 도우미 연결
@@ -479,7 +479,7 @@ final class FanController: ObservableObject {
         guard !isManual, appliedRPMs != nil, count == applyCount else { return }
         if overheated {
             // 같은 설정을 바로 다시 걸면 또 한계에 닿으니 자동으로 두고 알린다
-            fail("CPU가 \(Int(FanHelper.thermalLimit))°C를 넘어서 (멈춤이면 \(Int(FanHelper.stoppedThermalLimit))°C) 팬을 자동으로 되돌렸어요.")
+            fail("CPU 온도가 \(Int(FanHelper.thermalLimit))°C(멈춤 시 \(Int(FanHelper.stoppedThermalLimit))°C)를 넘어 자동으로 되돌렸습니다.")
         } else {
             AppLog.write("팬: 도우미가 자동으로 되돌려 둔 것을 확인, 다시 적용함")
             appliedRPMs = nil
@@ -507,22 +507,22 @@ final class FanController: ObservableObject {
     func installHelper() {
         guard let source = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("CheomaFanHelper"),
               FileManager.default.fileExists(atPath: source.path) else {
-            report("도우미 파일(CheomaFanHelper)을 찾지 못했어요. 앱과 같이 빌드해야 해요.")
+            report("도우미 파일(CheomaFanHelper)을 찾을 수 없습니다. 앱과 함께 빌드하십시오.")
             return
         }
         guard let client = Self.clientRequirement else {
-            report("앱의 코드 서명을 읽지 못했어요. 앱을 다시 내려받아 보세요.")
+            report("앱의 코드 서명을 읽을 수 없습니다. 앱을 다시 다운로드하십시오.")
             return
         }
         // 도우미의 서명은 번들 안 파일에서 읽으므로, 먼저 번들 전체가 지금 실행 중인 앱의 서명 그대로인지 확인한다.
         // 같은 사용자의 다른 프로세스가 번들 안 도우미만 바꿔 뒀다면 여기서 걸린다 (swift build로 띄운 개발 실행은 번들이 없어서 건너뛴다)
         if Bundle.main.bundleIdentifier != nil,
            !CodeSignature.bundle(at: Bundle.main.bundleURL, isIntactAndSatisfies: client) {
-            report("앱 파일이 서명과 달라요. 앱을 다시 내려받아 설치한 뒤 도우미를 설치하세요.")
+            report("앱 파일이 서명과 일치하지 않습니다. 앱을 다시 다운로드하여 설치한 후 도우미를 설치하십시오.")
             return
         }
         guard let helperRequirement = CodeSignature.designatedRequirement(ofFile: source) else {
-            report("도우미의 코드 서명을 읽지 못했어요. 앱을 다시 내려받아 보세요.")
+            report("도우미의 코드 서명을 읽을 수 없습니다. 앱을 다시 다운로드하십시오.")
             return
         }
         let plist: [String: Any] = [
@@ -535,7 +535,7 @@ final class FanController: ObservableObject {
             "StandardErrorPath": "/var/log/\(FanHelper.label).log",
         ]
         guard let plistData = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) else {
-            report("설치 파일을 준비하지 못했어요")
+            report("설치 파일을 준비하지 못했습니다.")
             return
         }
 
@@ -550,7 +550,7 @@ final class FanController: ObservableObject {
             try FileManager.default.copyItem(at: source, to: stagedBinary)
         } catch {
             try? FileManager.default.removeItem(at: staging)
-            report("설치 파일을 준비하지 못했어요: \(error.localizedDescription)")
+            report("설치 파일을 준비하지 못했습니다: \(error.localizedDescription)")
             return
         }
         let command = Self.installCommand(stagedBinary: stagedBinary.path, helperRequirement: helperRequirement,
@@ -569,7 +569,7 @@ final class FanController: ObservableObject {
             self.helperState = Self.installedState()
             if let error {
                 self.report(error.contains("CSSMERR") || error.contains("does not satisfy")
-                            ? "도우미 파일이 설치 도중 바뀌어서 설치를 멈췄어요. 다시 해 보세요." : Self.describe(error),
+                            ? "설치 중 도우미 파일이 변경되어 설치를 중단했습니다. 다시 시도하십시오." : Self.describe(error),
                             detail: error)
             } else {
                 AppLog.write("팬 도우미 설치 완료")
@@ -631,10 +631,10 @@ final class FanController: ObservableObject {
             arguments.firstIndex(of: flag).flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil }
         }
         guard value(after: "--helper-version") == String(FanHelper.version) else {
-            return .needsReinstall("도우미가 새 버전으로 바뀌어서 다시 설치해야 해요")
+            return .needsReinstall("도우미를 새 버전으로 다시 설치해야 합니다.")
         }
         guard let client = clientRequirement, value(after: "--allow-requirement") == client else {
-            return .needsReinstall("앱이 바뀌어서(업데이트 등) 도우미를 다시 설치해야 해요")
+            return .needsReinstall("앱이 변경되어 도우미를 다시 설치해야 합니다.")
         }
         return .installed
     }
@@ -729,9 +729,9 @@ final class FanController: ObservableObject {
     }
 
     private static func describe(_ error: String) -> String {
-        if error.contains("-128") { return "관리자 암호 입력을 취소했어요" }
-        if error.contains("-60005") { return "관리자 암호가 맞지 않았어요" }
-        return "관리자 작업에 실패했어요: \(error.trimmingCharacters(in: .whitespacesAndNewlines))"
+        if error.contains("-128") { return "관리자 암호 입력 취소됨" }
+        if error.contains("-60005") { return "관리자 암호가 올바르지 않음" }
+        return "관리자 작업 실패: \(error.trimmingCharacters(in: .whitespacesAndNewlines))"
     }
 
     /// 셸에 넘길 경로를 작은따옴표로 감싼다 (경로 안의 작은따옴표도 안전하게)

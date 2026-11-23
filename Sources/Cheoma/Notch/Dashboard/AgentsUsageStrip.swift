@@ -94,7 +94,7 @@ struct AgentsUsageStrip: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .help("계정 (이메일 · 요금제 · 한도)")
+            .help("계정")
             .accessibilityLabel("계정")
             Button { pane = pane == .launcher ? .session : .launcher } label: {
                 HStack(spacing: 4) {
@@ -124,7 +124,7 @@ struct AgentsUsageStrip: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .help("연결 설정 (Terminal 권한 · 훅)")
+            .help("연결 설정")
             .accessibilityLabel("연결 설정")
         }
     }
@@ -310,9 +310,9 @@ private struct CodexLimitsCard: View {
             rows: accounts.map { account in
                 .init(id: account.home, name: AgentsStyle.accountName(account.account),
                       windows: [account.usage?.primary, account.usage?.secondary].compactMap { $0 },
-                      emptyHelp: "이 계정으로 Codex를 한 번 쓰면 보여요")
+                      emptyHelp: "이 계정의 Codex 사용 기록 없음")
             },
-            help: (["Codex 사용 한도 (기록에서 읽어요)"] + accounts.map { account in
+            help: (["Codex 사용 한도"] + accounts.map { account in
                 let plan = (account.login?.plan ?? account.usage?.plan).map { " · \($0)" } ?? ""
                 let date = account.usage.map { " · \(AgentsStyle.ago($0.updatedAt)) 기록" } ?? ""
                 return "\(AgentsStyle.accountName(account.account))\(plan)\(date)"
@@ -330,7 +330,7 @@ private struct AntigravityLimitsCard: View {
             kind: .antigravity, title: "Antigravity", detail: nil,
             rows: usage.groups.map { group in
                 .init(id: group.name, name: AntigravityQuota.shortName(group.name), windows: group.windows,
-                      emptyHelp: "agy -p /usage로 받은 한도가 없어요")
+                      emptyHelp: "agy -p /usage 결과에 한도 없음")
             },
             help: (["Antigravity 사용 한도 (agy -p /usage)", usage.email, "\(AgentsStyle.ago(usage.updatedAt)) 받음"].compactMap { $0 })
                 .joined(separator: "\n"))
@@ -349,7 +349,7 @@ private struct ClaudeLimitsCard: View {
                 .init(id: account.account,
                       name: accounts.count > 1 || account.account != ".claude" ? AgentsStyle.accountName(account.account) : nil,
                       windows: account.limits,
-                      emptyHelp: "설정(톱니)에서 Claude Code를 연결한 뒤 이 계정으로 Claude를 한 번 쓰면 보여요")
+                      emptyHelp: "연결 설정에서 Claude Code 연결 후 표시")
             },
             help: help, firstOnly: firstOnly)
     }
@@ -357,9 +357,9 @@ private struct ClaudeLimitsCard: View {
     private var help: String {
         let lines = accounts.compactMap { account -> String? in
             guard let date = account.limitsUpdatedAt else { return nil }
-            return "\(AgentsStyle.accountName(account.account)): \(AgentsStyle.ago(date)) 받은 값"
+            return "\(AgentsStyle.accountName(account.account)): \(AgentsStyle.ago(date)) 받음"
         }
-        return (["Claude 구독 한도 (Claude Code 상태 줄에서 받아요)"] + lines).joined(separator: "\n")
+        return (["Claude 구독 한도"] + lines).joined(separator: "\n")
     }
 }
 
@@ -415,9 +415,9 @@ private struct ClaudeUsageCard: View {
 
     private func help(_ account: ClaudeUsage) -> String {
         var lines = ["\(AgentsStyle.accountName(account.account)): 오늘 \(AgentsStyle.cost(account.todayCostUSD)) · 토큰 \(AgentsStyle.tokens(account.todayTokens))",
-                     "쓴 토큰을 API 가격으로 셈한 값이에요. 구독이면 실제로 청구되지 않아요"]
+                     "API 가격 환산 · 구독 요금제는 청구되지 않음"]
         lines.append("지금 5시간 구간 \(AgentsStyle.cost(account.blockCostUSD))")
-        if let end = account.blockEndsAt, end > Date() { lines.append("구간은 \(AgentsStyle.until(end)) 끝나요") }
+        if let end = account.blockEndsAt, end > Date() { lines.append("구간 \(AgentsStyle.until(end)) 종료") }
         return lines.joined(separator: "\n")
     }
 }

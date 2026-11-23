@@ -34,7 +34,7 @@ struct AgentsSessionDetail: View {
             if session.location.canReply {
                 replyRow
             } else {
-                Text("이 세션은 터미널에 연결되지 않아 보기만 할 수 있어요")
+                Text("읽기 전용 세션")
                     .agentsFont(size: 10)
                     .foregroundStyle(.tertiary)
             }
@@ -64,19 +64,19 @@ struct AgentsSessionDetail: View {
             // 한도가 찬 계정의 대화를 다른 계정으로 옮겨 이어서 하기 (끝난 세션은 이어서 하기 단추가 늘 보인다)
             if resumeTarget != nil, session.state != .exited, hasOtherAccounts {
                 AgentsCapsuleButton(title: "다른 계정으로", symbol: "arrow.triangle.swap") { showsResume.toggle() }
-                    .help("이 대화를 다른 \(session.kind.displayName) 계정으로 이어서 해요")
+                    .help("다른 \(session.kind.displayName) 계정으로 이어서 하기")
             }
             if session.location.canReply {
                 AgentsCapsuleButton(title: "터미널로 가기", symbol: "arrow.up.forward.app") {
                     store.reveal(session.id)
                 }
-                .help(session.location.tty.map { "이 세션의 터미널을 앞으로 가져와요 (\($0))" } ?? "이 세션의 터미널을 앞으로 가져와요")
+                .help(session.location.tty.map { "이 세션의 터미널 앞으로 가져오기 (\($0))" } ?? "이 세션의 터미널 앞으로 가져오기")
             }
             if session.isLaunchedByCheoma {
-                AgentsCapsuleButton(title: "끝내기", symbol: "stop.fill", tint: .red) {
+                AgentsCapsuleButton(title: "종료", symbol: "stop.fill", tint: .red) {
                     store.stop(session.id)
                 }
-                .help("Cheoma가 띄운 tmux 세션을 끝내요")
+                .help("Cheoma가 시작한 tmux 세션 종료")
             }
         }
     }
@@ -95,7 +95,7 @@ struct AgentsSessionDetail: View {
 
     private var placeholder: String {
         if let summary = session.analysis?.summary { return summary }
-        return session.location.canReply ? "화면을 읽는 중…" : "이 세션의 화면은 읽을 수 없어요"
+        return session.location.canReply ? "화면을 읽는 중…" : "화면을 읽을 수 없음"
     }
 
     private func choiceList(_ choices: [AgentChoice]) -> some View {
@@ -138,10 +138,10 @@ struct AgentsSessionDetail: View {
                     keyButton(symbol: "arrow.up", key: .up, help: "위 화살표")
                     keyButton(symbol: "arrow.down", key: .down, help: "아래 화살표")
                     keyButton(symbol: "return", key: .enter, help: "Enter")
-                    keyButton("⌃C", key: .ctrlC, help: "Ctrl-C (멈추기)")
+                    keyButton("⌃C", key: .ctrlC, help: "Ctrl-C (중단)")
                 }
             } else if case .terminalApp = session.location {
-                Text("Terminal은 늘\nEnter까지 보내요")
+                Text("Enter\n자동 입력")
                     .agentsFont(size: 9)
                     .foregroundStyle(.tertiary)
                     .lineSpacing(0)
@@ -274,7 +274,7 @@ struct AgentsScreenTextSizeButtons: View {
         // 미리보기 글자 위에 떠 있어서 거의 불투명하게
         .background(Color(white: 0.1).opacity(0.95), in: Capsule())
         .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 1))
-        .help("터미널 화면 글자 크기 · 맞춤은 가장 긴 줄이 들어가게 줄여요")
+        .help("터미널 화면 글자 크기")
     }
 
     private func step(_ symbol: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
@@ -307,6 +307,7 @@ struct AgentReplyField: View {
     let model: NotchModel
     @State private var text = ""
     @FocusState private var isFocused: Bool
+    #if DEBUG
     /// `--render`용: ImageRenderer는 AppKit 글자 칸을 그리지 못해서 같은 모양의 글자로 대신 그린다
     static var drawsPlaceholderOnly = false
 
@@ -323,6 +324,9 @@ struct AgentReplyField: View {
             field
         }
     }
+    #else
+    var body: some View { field }
+    #endif
 
     private var field: some View {
         TextField("답 입력…", text: $text)

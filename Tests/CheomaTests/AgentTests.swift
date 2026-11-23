@@ -10,7 +10,7 @@ final class AgentScreenParserTests: XCTestCase {
     private func analyze(_ name: String) throws -> ScreenAnalysis {
         let text = try String(contentsOf: Self.screens.appendingPathComponent("\(name).txt"), encoding: .utf8)
         let kind = AgentKind.allCases.first { name.hasPrefix("\($0.rawValue)-") } ?? .claude
-        return AgentScreenParser.analyze(TerminalScreen(text: text, capturedAt: Date()), kind: kind)
+        return AgentScreenParser.analyze(TerminalScreen(text: text), kind: kind)
     }
 
     func testStates() throws {
@@ -112,14 +112,14 @@ final class AgentScreenParserTests: XCTestCase {
         ────────────────────────────────────────
           ⏸ manual mode on · ? for shortcuts
         """
-        let analysis = AgentScreenParser.analyze(TerminalScreen(text: screen, capturedAt: Date()), kind: .claude)
+        let analysis = AgentScreenParser.analyze(TerminalScreen(text: screen), kind: .claude)
         XCTAssertEqual(analysis.state, .needsInput)
         XCTAssertTrue(analysis.choices.isEmpty)
     }
 
     func testYesNoQuestion() {
         let screen = "Applying edits…\nAllow creation of new file foo.py? (Y)es/(N)o [Yes]: \nAdd file to the chat? [y/N]"
-        let analysis = AgentScreenParser.analyze(TerminalScreen(text: screen, capturedAt: Date()), kind: .aider)
+        let analysis = AgentScreenParser.analyze(TerminalScreen(text: screen), kind: .aider)
         XCTAssertEqual(analysis.state, .needsChoice)
         XCTAssertEqual(analysis.question, "Add file to the chat?")
         XCTAssertEqual(analysis.choices.map(\.key), ["y", "n"])
@@ -135,7 +135,7 @@ final class AgentScreenParserTests: XCTestCase {
 
     func testParserIsFast() throws {
         let text = try String(contentsOf: Self.screens.appendingPathComponent("pi-idle.txt"), encoding: .utf8)
-        let screen = TerminalScreen(text: text, capturedAt: Date())
+        let screen = TerminalScreen(text: text)
         let start = Date()
         for _ in 0..<20 { _ = AgentScreenParser.analyze(screen, kind: .pi) }
         // 디버그 빌드 기준. 릴리스는 훨씬 빠르다
@@ -450,20 +450,37 @@ final class AgentResumeTests: XCTestCase {
 /// 에이전트 탭 크기 제한
 final class AgentsSizeTests: XCTestCase {
     func testClampToDefaultAndScreen() {
-        let minimum = DashboardTab.agents.openSize
+        let minimum = NotchModel.compactAgentsSize
         let screen = CGSize(width: 1512, height: 982)
         XCTAssertEqual(NotchModel.clampAgents(CGSize(width: 100, height: 100), screen: screen, theme: .basic), minimum)
         let big = NotchModel.clampAgents(CGSize(width: 5_000, height: 5_000), screen: screen, theme: .basic)
         XCTAssertEqual(big, CGSize(width: 1352, height: 862))
-        // 광화문은 지붕 높이만큼 낮다
-        XCTAssertLessThan(NotchModel.clampAgents(CGSize(width: 5_000, height: 5_000), screen: screen, theme: .gwanghwamun).height, big.height)
+        let gate = NotchModel.clampAgents(CGSize(width: 5_000, height: 5_000), screen: screen, theme: .gwanghwamun)
+        XCTAssertLessThan(gate.height, big.height)
+        XCTAssertLessThanOrEqual(Gwanghwamun.frameSize(content: gate).width, screen.width - 160)
     }
     func testTextScaleRaisesMinimum() {
         let screen = CGSize(width: 1512, height: 982)
-        let minimum = CGSize(width: 988, height: 525)  // 기본 크기 × 130%
-        XCTAssertEqual(NotchModel.clampAgents(CGSize(width: 760, height: 404), minimum: minimum, screen: screen, theme: .basic), minimum)
+        let minimum = NotchModel.agentsMinimumSize(scale: 1.3)
+        XCTAssertEqual(minimum, CGSize(width: 884, height: 403))
+        XCTAssertEqual(NotchModel.clampAgents(CGSize(width: 680, height: 310), minimum: minimum, screen: screen, theme: .basic), minimum)
         XCTAssertEqual(AgentsTextScale.larger.percent, "130%")
         XCTAssertEqual(AgentsTextScale.allCases.map(\.rawValue), AgentsTextScale.allCases.map(\.rawValue).sorted())
+    }
+    /// 글자를 키웠다 줄이면 탭도 원래 크기로 돌아온다 (예전에는 줄여도 커진 크기가 남아 계속 커졌다)
+    func testTextScaleUpThenDownRestoresSize() {
+        let screen = CGSize(width: 1512, height: 982)
+        let base = CGSize(width: 900, height: 500)
+        XCTAssertEqual(NotchModel.agentsSize(base: base, scale: 1, screen: screen, theme: .basic), base)
+        XCTAssertEqual(NotchModel.agentsSize(base: base, scale: 1.5, screen: screen, theme: .basic), CGSize(width: 1350, height: 750))
+        XCTAssertEqual(NotchModel.agentsSize(base: base, scale: 1, screen: screen, theme: .basic), base)
+        // 화면에 막혀 덜 커졌어도 기준 크기는 그대로라 줄이면 원래 크기
+        let wide = CGSize(width: 1300, height: 700)
+        XCTAssertEqual(NotchModel.agentsSize(base: wide, scale: 1.5, screen: screen, theme: .basic), CGSize(width: 1352, height: 862))
+        XCTAssertEqual(NotchModel.agentsSize(base: wide, scale: 1, screen: screen, theme: .basic), wide)
+        // 기본 크기 그대로면 배율만큼만
+        XCTAssertEqual(NotchModel.agentsSize(base: DashboardTab.agents.openSize, scale: 1.3, screen: screen, theme: .basic),
+                       CGSize(width: 988, height: 525))
     }
 }
 
