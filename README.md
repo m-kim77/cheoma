@@ -14,6 +14,7 @@ Cheoma does the same for your MacBook's notch:
 - **Rings the chime.** Charger, unlock, overheating, low memory and low battery show up as small alerts around the notch.
 - **Watches the weather inside your Mac.** Hover over the notch to see CPU, GPU, memory, power, network, storage, temperatures and the apps using the most.
 - **Keeps things cool.** Set fan speeds yourself: a fixed RPM per fan, or a temperature curve.
+- **Takes dictation.** Hold a key and talk, and the words are typed into the app you're using. Speech stays on your Mac.
 - **Calls you back to the agents.** See which Claude Code, Codex, OpenCode, pi, Hermes or Antigravity CLI (agy) session is waiting for you, answer it from the notch, and keep an eye on your subscription limits.
 
 **[Download Cheoma](https://github.com/m-kim77/cheoma/releases/latest/download/Cheoma.zip)** · free and open source · Apple Silicon · macOS 14 or later · the interface is in Korean (this page translates every label)
@@ -131,10 +132,20 @@ The **에이전트** (Agents) tab watches the coding agents running in your term
 To set it up, click the gear button in the Agents tab:
 
 - **Terminal 연결** (Connect Terminal) lets Cheoma read and answer sessions in Terminal.app tabs. tmux sessions don't need it.
-- **모두 연결** (Connect all) adds Cheoma's hooks so alerts arrive the moment something happens. For Claude Code it edits `settings.json` in each config folder, and also sets the status line if you don't have one, which keeps the limits up to date. For Codex it sets `notify` in `config.toml` if nothing else uses it. Other settings are left alone, and the original file is kept as `.cheoma-backup`. **연결 끊기** (Disconnect) removes only Cheoma's entries.
+- **모두 연결** (Connect all) adds Cheoma's hooks so alerts arrive the moment something happens. For Claude Code it edits `settings.json` in each config folder, and also sets the status line if you don't have one, which keeps the limits up to date. For Codex it sets `notify` in `config.toml` if nothing else uses it. Other settings are left alone, and the original file is kept as `.cheoma-backup`. **연결 해제** (Disconnect) in Settings › 에이전트 (Agents) removes only Cheoma's entries.
 - New agents and resuming need tmux: `brew install tmux`.
 
 Claude Code also runs on its own sometimes while you're away: it compacts an idle conversation before its cache expires, and writes a recap for when you come back. Both use a little of your plan. Cheoma shows these as waiting, without alerts. To turn them off, add `"idleCompaction": false` to `settings.json`, and turn off recaps in `/config`.
+
+### Dictation
+
+Hold a key, talk, and let go: what you said is typed into the app you were using. It's off until you turn on **받아쓰기 사용** (Use dictation) in Settings › 받아쓰기 (Dictation).
+
+- **Key**: right ⌥ by default, or right ⌘ or fn in Settings. With **두 번 눌러 계속 듣기** (Double-press to keep listening) on, a quick double press keeps listening until you press it again. Esc cancels, and the Esc doesn't reach the app underneath. Up to 2 minutes at a time.
+- **Engine**: **Apple 음성 인식** (Apple speech recognition, macOS 26 or later) shows the words in the notch as you speak. **Whisper** uses `whisper-cli` (`brew install whisper-cpp`) and a `ggml-*.bin` model in `~/models` or one you pick, and is better at Korean mixed with English terms. Both run on your Mac.
+- **용어집** (Glossary): one entry per line, `heard → written` to replace, or a single word to help the engine. Common developer terms are built in, so 도커를 becomes Docker를.
+- **Paste**: Cheoma pastes with ⌘V, or through the Edit menu in Chromium and Electron apps. In password fields and during secure input it only copies to the clipboard. **붙여넣은 후 클립보드 복원** (Restore clipboard after pasting) puts your clipboard back; on macOS 26 that needs Cheoma allowed under Paste from Other Apps.
+- Locking the screen or going to sleep throws away what's being heard. The **테스트** (Test) field at the bottom of the Dictation settings lets you try it first.
 
 ### Right-click menu
 
@@ -171,7 +182,9 @@ make && /Applications/Cheoma.app/Contents/MacOS/Cheoma --notify "Build passed" -
 
 | Permission | Why | Where |
 |---|---|---|
-| Accessibility | To read and press menu bar icons hidden behind the notch | `⌄` › 권한 허용…, or System Settings › Privacy & Security › Accessibility |
+| Accessibility | To read and press menu bar icons hidden behind the notch, and for dictation to catch its key and paste in other apps | `⌄` › 권한 허용…, or System Settings › Privacy & Security › Accessibility |
+| Microphone | To hear you while the dictation key is held (only if you turn dictation on) | Settings › 받아쓰기 › 권한 |
+| Paste from Other Apps (macOS 26) | To put your clipboard back after dictation pastes (optional) | Settings › 받아쓰기 › 붙여넣기 |
 | Automation › Terminal | To read and answer agent sessions in Terminal.app tabs (only if you use the Agents tab) | Agents tab › gear › Terminal 연결 |
 | Administrator password, once | To install the fan helper, a small background service that runs as root and sets fan speeds | Fans tab › 도우미 설치 |
 
@@ -179,11 +192,13 @@ The dashboard, sensors and alerts need no permission.
 
 ## Privacy
 
-The only thing Cheoma sends over the network is the update check. Shortly after launch and then once a day, it asks GitHub for the latest release (`api.github.com/repos/m-kim77/cheoma/releases/latest`). The request carries the app name and version (`Cheoma/0.2.0`) and, like any web request, your IP address. Nothing else: no analytics, no accounts, and everything Cheoma measures stays on your Mac.
+The only thing Cheoma sends over the network is the update check. Shortly after launch and then once a day, it asks GitHub for the latest release (`api.github.com/repos/m-kim77/cheoma/releases/latest`). The request carries the app name and version (`Cheoma/0.3.0`) and, like any web request, your IP address. Nothing else: no analytics, no accounts, and everything Cheoma measures stays on your Mac.
 
 To turn the check off, switch off **자동으로 업데이트 확인** (Check for updates automatically) in Settings › 업데이트 (Updates). Cheoma then makes no network requests at all.
 
 The Agents tab reads files the agents keep on your Mac (session status, conversation logs and the account and limit info they save) and terminal screens. It changes agent settings only when you click **모두 연결** (Connect all), and copies a conversation only when you resume it in another account.
+
+Dictation listens only while the key is held. Speech is turned into text on your Mac and dropped right after, and nothing is sent anywhere.
 
 ## Update
 
